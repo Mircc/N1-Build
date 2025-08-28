@@ -381,6 +381,9 @@ jobs:
         CONFIG_PACKAGE_wpa-cli=y
         CONFIG_PACKAGE_wpad-basic=y
         CONFIG_PACKAGE_iw=y
+        CONFIG_PACKAGE_iptables-mod-socket=y
+        CONFIG_PACKAGE_iptables-mod-iprange=y
+        CONFIG_PACKAGE_iptables-mod-conntrack-extra=y
         EOF
 
         # 
