@@ -1,0 +1,219 @@
+name: Build ARMv8Mini HarmonyOS - Auto Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: '是否上传 构建产物 到 Actions Artifact (true/false)'
+        required: false
+        default: 'true'
+      run_diy:
+        description: '是否执行仓库内的 DIY 脚本 immo_diy.sh (true/false)'
+        required: false
+        default: 'true'
+  repository_dispatch:
+  watch:
+    types: [started]
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: openwrt-24.10
+  TZ: Asia/Shanghai
+  FILE_NAME: harmonyos_armvirt
+  PRODUCT_NAME: HarmonyOS_ARMv8
+  # 设为 true 以默认自动发布（符合你选择的 B）
+  UPLOAD_RELEASE: true
+  UPLOAD_ARTIFACTS: true
+  SWAP: false
+  DIY_SH: immo_diy.sh
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    # 仅在来源触发者为仓库拥有者或手动触发时运行（保留安全性）
+    if: github.event.repository.owner.id == github.event.sender.id || github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        submodules: recursive
+
+    - name: Prepare environment (install deps)
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y --no-install-recommends build-essential libncurses5-dev gawk git gettext libssl-dev xsltproc rsync unzip file python3 python3-distutils bzip2 ca-certificates jq pv uuid-runtime xz-utils
+        sudo apt-get install -y --no-install-recommends libfuse-dev || true
+        sudo timedatectl set-timezone "$TZ"
+
+    - name: Create workdir and clone immortalwrt (separate workspace)
+      run: |
+        mkdir -p /workdir
+        cd /workdir
+        git clone --depth 1 -b "${REPO_BRANCH}" "${REPO_URL}" openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        cd /workdir/openwrt
+        echo "CLONED_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+        echo "CLONED_BRANCH=${REPO_BRANCH}" >> $GITHUB_ENV
+        echo "DATE=$(date "+%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
+        echo "FILE_DATE=_$(date +'%Y%m%d%H%M')" >> $GITHUB_ENV
+
+    - name: Update feeds
+      working-directory: /workdir/openwrt
+      run: |
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Optionally run repository DIY script (immo_diy.sh)
+      if: ${{ github.event.inputs.run_diy == 'true' }}
+      working-directory: /workdir/openwrt
+      run: |
+        if [ -f "$GITHUB_WORKSPACE/$DIY_SH" ]; then
+          chmod +x "$GITHUB_WORKSPACE/$DIY_SH"
+          cp "$GITHUB_WORKSPACE/$DIY_SH" .
+          bash -x "./$DIY_SH"
+        else
+          echo "No DIY script found at $GITHUB_WORKSPACE/$DIY_SH, skipping."
+        fi
+
+    - name: Apply conservative brand replacement (replace visible names with HarmonyOS)
+      working-directory: /workdir/openwrt
+      env:
+        NEW_NAME: "HarmonyOS"
+      run: |
+        set -euo pipefail
+        OUT_LOG="$GITHUB_WORKSPACE/brand_replace_changes.txt"
+        echo "Brand replace run: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" > "$OUT_LOG"
+
+        safe_replace() {
+          local file="$1"
+          local desc="$2"
+          if [ -f "$file" ]; then
+            cp -a "$file" "${file}.bak.brand"
+            sed -i -E "s/(OpenWrt|openwrt|OPENWRT)/${NEW_NAME}/gI" "$file" || true
+            sed -i -E "s/(ImmortalWrt|immortalwrt|IMMORTALWRT)/${NEW_NAME}/gI" "$file" || true
+            echo "MODIFIED: $file -- $desc" >> "$OUT_LOG"
+          fi
+        }
+
+        # base-files
+        safe_replace "package/base-files/files/etc/os-release" "os-release"
+        safe_replace "package/base-files/files/etc/banner" "banner"
+        safe_replace "package/base-files/files/bin/config_generate" "config_generate"
+
+        # luci translations & templates in feeds/luci
+        if [ -d "feeds/luci" ]; then
+          find feeds/luci -type f \( -name "*.po" -o -name "*.js" -o -name "*.html" -o -name "*.htm" -o -name "*.lua" \) | while read -r f; do
+            if file --brief --mime-type "$f" | grep -q text; then
+              cp -n "$f" "${f}.bak.brand" 2>/dev/null || true
+              sed -i -E "s/(OpenWrt|openwrt|OPENWRT)/${NEW_NAME}/gI" "$f" || true
+              sed -i -E "s/(ImmortalWrt|immortalwrt|IMMORTALWRT)/${NEW_NAME}/gI" "$f" || true
+              echo "MODIFIED: $f -- luci text" >> "$OUT_LOG"
+            fi
+          done || true
+        fi
+
+        # package luci and theme text files
+        find package -maxdepth 3 -type f \( -name "*.po" -o -name "*.js" -o -name "*.html" -o -name "*.htm" -o -name "*.lua" \) | while read -r f; do
+          if file --brief --mime-type "$f" | grep -q text; then
+            cp -n "$f" "${f}.bak.brand" 2>/dev/null || true
+            sed -i -E "s/(OpenWrt|openwrt|OPENWRT)/${NEW_NAME}/gI" "$f" || true
+            sed -i -E "s/(ImmortalWrt|immortalwrt|IMMORTALWRT)/${NEW_NAME}/gI" "$f" || true
+            echo "MODIFIED: $f -- package luci/text" >> "$OUT_LOG"
+          fi
+        done || true
+
+        # optional: copy user-supplied logo (if present in repo scripts/)
+        if [ -f "$GITHUB_WORKSPACE/scripts/harmonyos_logo.png" ]; then
+          for dst in package/luci-theme-argon/htdocs/luci-static/argon/img/logo.png \
+                     feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/img/logo.png \
+                     package/luci-theme-bootstrap/htdocs/luci-static/bootstrap/img/logo.png; do
+            if [ -d "$(dirname "$dst")" ]; then
+              mkdir -p "$(dirname "$dst")"
+              cp -f "$GITHUB_WORKSPACE/scripts/harmonyos_logo.png" "$dst"
+              echo "COPIED LOGO -> $dst" >> "$OUT_LOG"
+            fi
+          done
+        fi
+
+        echo "NOTE: license and copyright files are excluded from replacements." >> "$OUT_LOG"
+        cat "$OUT_LOG"
+        cp "$OUT_LOG" "$GITHUB_WORKSPACE/brand_replace_changes.txt" || true
+
+    - name: Generate .config for target (minimal example)
+      working-directory: /workdir/openwrt
+      run: |
+        rm -f ./.config*
+        touch ./.config
+        cat >> .config <<'EOF'
+        CONFIG_TARGET_armsr=y
+        CONFIG_TARGET_armsr_armv8=y
+        CONFIG_TARGET_armsr_armv8_DEVICE_generic=y
+        CONFIG_TARGET_ARCH_PACKAGES="aarch64_generic"
+        CONFIG_DEFAULT_TARGET_OPTIMIZATION="-Os -pipe -mcpu=generic"
+        CONFIG_CPU_TYPE="generic"
+        EOF
+        sed -i 's/^[ \t]*//g' ./.config
+        make defconfig
+
+    - name: Download packages
+      working-directory: /workdir/openwrt
+      run: |
+        make download -j8 || true
+        find dl -size -1024c -exec rm -f {} \; || true
+
+    - name: Compile firmware
+      id: compile
+      working-directory: /workdir/openwrt
+      run: |
+        echo "Start build: $(nproc) threads"
+        make -j$(nproc) V=s
+        echo "status=success" >> ${GITHUB_OUTPUT} || true
+        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME || true
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV || true
+        echo "FILE_DATE=_$(date +'%Y%m%d%H%M')" >> $GITHUB_ENV || true
+
+    - name: Create artifacts (package tar + target images)
+      if: steps.compile.outputs.status == 'success'
+      working-directory: /workdir/openwrt
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/artifacts
+        cp -a bin/packages "$GITHUB_WORKSPACE/artifacts/" || true
+        cp -a bin/targets "$GITHUB_WORKSPACE/artifacts/" || true
+        cp -a bin/config "$GITHUB_WORKSPACE/artifacts/config" || true
+        if [ -f "$GITHUB_WORKSPACE/brand_replace_changes.txt" ]; then
+          cp "$GITHUB_WORKSPACE/brand_replace_changes.txt" "$GITHUB_WORKSPACE/artifacts/"
+        fi
+        ls -lah "$GITHUB_WORKSPACE/artifacts" || true
+
+    - name: Upload artifacts to Actions (optional/input-controlled)
+      if: ${{ github.event.inputs.upload_artifacts == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: harmonyos-build-artifacts
+        path: ${{ github.workspace }}/artifacts
+        retention-days: 30
+
+    - name: Create Release with artifacts (AUTOMATIC - default enabled)
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ env.PRODUCT_NAME }}${{ env.FILE_DATE }}
+        name: "HarmonyOS Firmware ${{ env.FILE_DATE }} for ${{ env.PRODUCT_NAME }}"
+        body: |
+          - Source repo: ${{ env.REPO_URL }} @ ${{ env.CLONED_COMMIT }}
+          - Build time: ${{ env.DATE }}
+          - NOTE: This build replaces visible OpenWrt/ImmortalWrt strings with HarmonyOS for UI display only.
+          - Please verify checksums after download.
+        artifacts: ${{ github.workspace }}/artifacts/*
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Final cleanup (best-effort)
+      if: always()
+      run: |
+        sudo swapoff -a || true
+        sudo rm -rf /workdir/openwrt || true
+        df -h || true
