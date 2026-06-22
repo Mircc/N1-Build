@@ -310,6 +310,18 @@ jobs:
         rm -rf packages
         echo "status=success" >> ${GITHUB_OUTPUT}
 
+    - name: Debug - List firmware files
+      if: steps.organize.outputs.status == 'success'
+      run: |
+        echo "========== x86/64 目录所有文件 =========="
+        ls -lah $GITHUB_WORKSPACE/openwrt/bin/targets/x86/64/
+        echo ""
+        echo "========== combined-efi 文件 =========="
+        ls -lah $GITHUB_WORKSPACE/openwrt/bin/targets/x86/64/*combined-efi* 2>/dev/null || echo "未找到 combined-efi 文件"
+        echo ""
+        echo "========== bin 目录顶层 =========="
+        ls -lah $GITHUB_WORKSPACE/openwrt/bin/
+
     - name: Calculate MD5
       if: steps.organize.outputs.status == 'success'
       run: |
