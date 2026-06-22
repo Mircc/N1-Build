@@ -1,104 +1,34 @@
+#
+# 自动同步 OldCoding/openwrt_packit_arm 的 immo_diy.sh
+# 每周一北京时间 18:00 自动运行，有更新则自动合并（保留默认IP配置）
+#
 name: Sync upstream immo_diy.sh
 
 on:
   schedule:
-    - cron: '0 10 * * 1'  # 每周一 UTC 10:00 (北京时间 18:00) 运行
-  workflow_dispatch:  # 允许手动触发
+    - cron: '0 10 * * 1'   # 每周一 UTC 10:00 = 北京时间 18:00
+  workflow_dispatch:          # 允许手动触发
+
+permissions:
+  contents: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Download upstream immo_diy.sh
+      - name: Run sync script
+        id: sync
         run: |
-          curl -sL https://raw.githubusercontent.com/OldCoding/openwrt_packit_arm/refs/heads/main/immo_diy.sh -o /tmp/upstream_immo_diy.sh
-          echo "Downloaded upstream file"
-          wc -l /tmp/upstream_immo_diy.sh
-
-      - name: Compare and merge
-        id: compare
-        run: |
-          # 提取上游文件中的第三方包添加部分 (从“依赖和冲突”到“安装插件”之前)
-          # 我们需要保留上游的包列表，同时保留我们自己的默认IP配置块
-          # 简单策略：直接用上游文件覆盖，然后重新插入我们的默认IP配置块
-
-          # 1. 备份当前文件的默认IP配置块
-          grep -A 50 "设置默认网络配置" immo_diy.sh > /tmp/default_ip_block.txt 2>/dev/null || echo "No default IP block found" > /tmp/default_ip_block.txt
-
-          # 2. 如果上游文件有效 (非空且包含 svn_export 函数)
-          if [ -s /tmp/upstream_immo_diy.sh ] && grep -q "svn_export" /tmp/upstream_immo_diy.sh; then
-            # 使用上游文件替换
-            cp /tmp/upstream_immo_diy.sh immo_diy.sh
-            echo "Replaced immo_diy.sh with upstream version"
-          else
-            echo "Upstream file invalid, keeping local version"
-            exit 0
-          fi
-
-          # 3. 在上游文件的 `./scripts/feeds install -a` 之后插入默认IP配置块
-          # 查找 `./scripts/feeds install -a` 的行号
-          LINE_NUM=$(grep -n "^\./scripts/feeds install -a" immo_diy.sh | head -1 | cut -d: -f1)
-          if [ -z "$LINE_NUM" ]; then
-            echo "Cannot find './scripts/feeds install -a' in immo_diy.sh"
-            exit 1
-          fi
-
-          # 在上游文件的该行之后插入我们的默认IP配置块
-          # 使用 sed 插入 (注意：macOS 的 sed 和 Linux 的 sed 有区别，这里用 GitHub Actions 的 Ubuntu)
-          sed -i "$((LINE_NUM+1))a\\
-# ===== 默认IP配置 (自动添加，请勿删除) =====\\
-echo \"===== 设置默认网络配置 =====\"\\
-mkdir -p files/etc/uci-defaults\\
-\\
-cat > files/etc/uci-defaults/99-set-default-ip << 'EOF'\\
-#!/bin/sh\\
-# 设置默认LAN IP\\
-uci set network.lan.ipaddr='192.168.50.200'\\
-uci set network.lan.netmask='255.255.255.0'\\
-uci set network.lan.gateway='192.168.50.1'\\
-uci set network.lan.dns='192.168.50.1'\\
-uci commit network\\
-# 设置系统主机名\\
-uci set system.@system[0].hostname='OpenWrt-N1'\\
-uci commit system\\
-exit 0\\
-EOF\\
-chmod +x files/etc/uci-defaults/99-set-default-ip\\
-\\
-# ===== 设置欢迎信息 =====\\
-mkdir -p files/etc\\
-cat > files/etc/banner << 'EOF'\\
-\\
-  _______                        __  _______ _____\\
- |       |___   _____   ___  __|  ||   _   |  _  |\\
- |   -   |   | |     | |   |/ _  ||   |   |     |\\
- |_______|___| |__|__| |___|_____||___|___|__|__|\\
-        ImmortalWrt for N1/X86\\
-        Default IP: 192.168.50.200\\
-        User: root  Password: password\\
-\\
-EOF
-" immo_diy.sh
-
-          echo "Default IP block re-inserted"
-
-          # 4. 检查是否有变更
-          if ! git diff --quiet immo_diy.sh; then
-            echo "CHANGES_DETECTED=true" >> $GITHUB_OUTPUT
-          else
-            echo "No changes detected"
-            echo "CHANGES_DETECTED=false" >> $GITHUB_OUTPUT
-          fi
+          python3 scripts/sync_immo_diy.py
+        continue-on-error: true
 
       - name: Commit and push changes
-        if: steps.compare.outputs.CHANGES_DETECTED == 'true'
+        if: steps.sync.outcome == 'success'
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
@@ -110,10 +40,10 @@ EOF
 
       - name: Create issue on failure
         if: failure()
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
-            github.rest.issues.create({
+            await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: "⚠️ Upstream sync failed",
