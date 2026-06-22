@@ -33,6 +33,9 @@ env:
   FILE_NAME: openwrt_armvirt
   PRODUCT_NAME: N1-ImmortalWrt
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -307,11 +310,23 @@ jobs:
         rm -rf packages
         echo "status=success" >> ${GITHUB_OUTPUT}
 
+    - name: Debug - List tar.gz files
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      run: |
+        echo "========== 所有 tar.gz 文件 =========="
+        find openwrt/bin/targets -name "*.tar.gz" -ls 2>/dev/null || echo "No tar.gz found"
+        echo ""
+        echo "========== glob 匹配结果 =========="
+        ls -la openwrt/bin/targets/*/*/*.tar.gz 2>/dev/null || echo "glob matched nothing"
+        echo ""
+        echo "========== targets 目录结构 =========="
+        find openwrt/bin/targets -maxdepth 3 -type f 2>/dev/null | head -30
+
     - name: Package Armvirt as OpenWrt (N1)
       if: steps.organize.outputs.status == 'success' && !cancelled()
       uses: ophub/flippy-openwrt-actions@main
       env:
-        OPENWRT_ARMVIRT: openwrt/bin/targets/*/*/*.tar.gz
+        OPENWRT_ARMSR: openwrt/bin/targets/*/*/*rootfs.tar.gz
         PACKAGE_SOC: s905d
         KERNEL_VERSION_NAME: ${{ env.KERNEL_VER }}
         WHOAMI: Mircc

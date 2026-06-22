@@ -32,6 +32,9 @@ env:
   FILE_NAME: openwrt_x86_64
   PRODUCT_NAME: X86-ImmortalWrt
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
