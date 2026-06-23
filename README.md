@@ -4,10 +4,10 @@
 
 ## ✨ 特性
 
-- ✅ 自动每日编译 (北京时间 04:00 / 05:00)
+- ✅ 自动每月9号编译 (北京时间 04:00 / 05:00)
 - ✅ 手动触发编译 (`workflow_dispatch`)
 - ✅ N1 和 X86 分开编译，互不干扰
-- ✅ 自动打包 N1 固件 (使用 flippy 内核)
+- ✅ 自动打包 N1 固件 (使用 amlogic 内核)
 - ✅ X86 直接输出 EFI 镜像
 - ✅ Release 自动生成，包含 IP、密码、更新日志
 - ✅ 自动清理旧 Release (保留最新 10 个)
@@ -22,7 +22,7 @@
 | DNS | `192.168.50.1` |
 | 默认用户 | `root` |
 | 默认密码 | `password` |
-| 源码分支 | `openwrt-24.10` |
+| 源码分支 | `master` (基于 OpenWrt 25.12) |
 
 ## 📦 已集成 LuCI 插件
 
@@ -41,7 +41,7 @@
 - `luci-app-lucky` - Luckytool
 - `luci-app-socat` - 端口转发
 - `luci-app-ddns` - 动态DNS
-- `luci-app-zerotier` - Zerotier虚拟网
+- `luci-app-tailscale` - Tailscale组网
 
 ### 下载/文件服务
 - `luci-app-aria2` - Aria2下载
@@ -81,7 +81,7 @@ git push -u origin main
 
 ### 3. 触发编译
 
-- **自动**：每天北京时间 04:00 (N1) / 05:00 (X86) 自动触发
+- **自动**：每月9号北京时间 04:00 (N1) / 05:00 (X86) 自动触发
 - **手动**：进入 Actions 页面 → 选择对应 Workflow → 点击 "Run workflow"
 
 ### 4. 下载固件
@@ -115,23 +115,10 @@ git push -u origin main
 
 编辑 `KernelVersion` 文件，支持的内核版本参考 [ophub/kernel releases](https://github.com/ophub/kernel/releases)。
 
-## 🔄 自动同步上游更新
-
-本项目会定期（每周一北京时间 18:00）自动检查 [OldCoding/openwrt_packit_arm](https://github.com/OldCoding/openwrt_packit_arm) 仓库的 `immo_diy.sh` 文件是否有更新。
-
-如果有更新，会自动：
-1. 下载最新的上游 `immo_diy.sh`
-2. 替换本地的 `immo_diy.sh`（保留你的默认 IP 配置）
-3. 提交更改到仓库
-
-这样你就能持续获得最新的第三方插件更新，同时保持自己的个性化配置。
-
-**手动触发同步**：进入 Actions → 选择 "Sync upstream immo_diy.sh" → Run workflow
-
 ## 📄 参考
 
 - 源码：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt)
-- N1打包：[ophub/flippy-openwrt-actions](https://github.com/ophub/flippy-openwrt-actions)
+- N1打包：[OldCoding/amlogic-s9xxx-openwrt](https://github.com/OldCoding/amlogic-s9xxx-openwrt)
 - 参考配置：[OldCoding/openwrt_packit_arm](https://github.com/OldCoding/openwrt_packit_arm)
 
 ## ⚠️ 免责声明
