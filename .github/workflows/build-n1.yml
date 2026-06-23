@@ -18,7 +18,7 @@ on:
         required: false
         default: ''
   schedule:
-    - cron: '0 20 * * *'   # 每天UTC 20:00 = 北京时间 04:00 自动编译
+    - cron: '0 20 8 * *'   # 每月9号 UTC 20:00 = 北京时间次日04:00
   watch:
     types: [started]
 
