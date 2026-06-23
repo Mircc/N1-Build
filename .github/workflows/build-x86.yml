@@ -342,7 +342,7 @@ jobs:
         tag: ${{ env.PRODUCT_NAME }}
         commit: main
         token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: $GITHUB_WORKSPACE/openwrt/bin/targets/x86/64/*
+        artifacts: ${{ github.workspace }}/openwrt/bin/targets/x86/64/*
         body: |
           # 🖥️ ImmortalWrt for X86_64 固件
 
