@@ -53,7 +53,6 @@
 ### 其他
 - `luci-app-adguardhome` - AdGuard Home去广告
 - `luci-app-dockerman` - Docker管理
-- `luci-app-frpc` - 内网穿透
 - `luci-app-ipsec-server` - IPSec VPN
 - `luci-app-vlmcsd` - KMS激活
 - `luci-app-netspeedtest` - 网速测试
