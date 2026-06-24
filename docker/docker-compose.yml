@@ -1,0 +1,37 @@
+#
+# N1-Build 本地编译编排
+#
+# 用法:
+#   ./build.sh n1        编译 N1 固件 (aarch64 + amlogic 打包)
+#   ./build.sh aarch64   编译通用 aarch64 镜像 (跳过 amlogic 打包)
+#   ./build.sh x86       编译 X86_64 固件 (需在 x86_64 宿主机运行)
+#
+services:
+  openwrt-build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: n1-build:local
+    container_name: n1-build
+    privileged: true              # remoke 脚本需要 loop 设备权限
+
+    environment:
+      - BUILD_TARGET=${BUILD_TARGET:-n1}
+      - TZ=Asia/Shanghai
+
+    volumes:
+      # === 编译缓存（持久化，加速二次编译）===
+      - ../cache/dl:/workdir/openwrt/dl
+      - ../cache/build_dir:/workdir/openwrt/build_dir
+      - ../cache/staging_dir:/workdir/openwrt/staging_dir
+      - ../cache/ccache:/root/.ccache
+
+      # === 输入文件（只读）===
+      - ../immo_diy.sh:/workdir/immo_diy.sh:ro
+      - ../KernelVersion:/workdir/KernelVersion:ro
+
+      # === 构建脚本 ===
+      - ./scripts/entrypoint.sh:/workdir/scripts/entrypoint.sh:ro
+
+      # === 最终产物输出 ===
+      - ../output:/workdir/output

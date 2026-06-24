@@ -1,0 +1,6 @@
+# Docker 编译缓存 & 产物
+cache/
+output/
+
+# macOS
+.DS_Store
