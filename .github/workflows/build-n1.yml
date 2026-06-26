@@ -392,22 +392,23 @@ jobs:
           > ⚠️ 刷机有风险，操作需谨慎！
 
     # ╔══════════════════════════════════════════════════════╗
-    # ║  通用 aarch64 镜像上传（可注释掉禁用）              ║
-    # ║  编译产物: armsr/armv8 generic-efi.img.gz 等        ║
-    # ║  适用: ARM 云服务器/虚拟机/UEFI 引导的 ARM 设备     ║
+    # ║  通用 aarch64 镜像上传（已禁用）                    ║
+    # ║  原因: armsr 编译时 CONFIG_TARGET_IMAGES_GZIP=n     ║
+    # ║        且 Clean up 步骤清空了 targets 目录           ║
+    # ║        N1 打包只需要 rootfs.tar.gz，无需额外 img.gz  ║
     # ╚══════════════════════════════════════════════════════╝
-    - name: Upload generic aarch64 images to Release
-      uses: ncipollo/release-action@main
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
-      with:
-        name: ${{ env.VER }} for ${{ env.PRODUCT_NAME }}
-        allowUpdates: true
-        removeArtifacts: false
-        replacesArtifacts: false
-        tag: ${{ env.PRODUCT_NAME }}
-        commit: main
-        token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: ${{ github.workspace }}/openwrt/bin/targets/armsr/armv8/*generic-*.img.gz
+    # - name: Upload generic aarch64 images to Release
+    #   uses: ncipollo/release-action@main
+    #   if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+    #   with:
+    #     name: ${{ env.VER }} for ${{ env.PRODUCT_NAME }}
+    #     allowUpdates: true
+    #     removeArtifacts: false
+    #     replacesArtifacts: false
+    #     tag: ${{ env.PRODUCT_NAME }}
+    #     commit: main
+    #     token: ${{ secrets.GITHUB_TOKEN }}
+    #     artifacts: ${{ github.workspace }}/openwrt/bin/targets/armsr/armv8/*generic-*.img.gz
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
