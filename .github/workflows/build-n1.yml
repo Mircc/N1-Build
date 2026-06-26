@@ -183,7 +183,7 @@ jobs:
         CONFIG_TARGET_ROOTFS_TARGZ=y
         CONFIG_TARGET_UBIFS_FREE_SPACE_FIXUP=y
         CONFIG_TARGET_UBIFS_JOURNAL_SIZE=""
-        # CONFIG_TARGET_IMAGES_GZIP is not set
+        CONFIG_TARGET_IMAGES_GZIP=y
         # CONFIG_TARGET_ROOTFS_PERSIST_VAR is not set
         EOF
 
@@ -392,23 +392,29 @@ jobs:
           > ⚠️ 刷机有风险，操作需谨慎！
 
     # ╔══════════════════════════════════════════════════════╗
-    # ║  通用 aarch64 镜像上传（已禁用）                    ║
-    # ║  原因: armsr 编译时 CONFIG_TARGET_IMAGES_GZIP=n     ║
-    # ║        且 Clean up 步骤清空了 targets 目录           ║
-    # ║        N1 打包只需要 rootfs.tar.gz，无需额外 img.gz  ║
+    # ║  通用 aarch64 镜像上传                                  ║
+    # ║  编译产物: armsr/armv8/*.img.gz (EFI 引导 ARM 镜像)    ║
+    # ║  适用: ARM 云服务器 / 虚拟机 / UEFI ARM 设备          ║
     # ╚══════════════════════════════════════════════════════╝
-    # - name: Upload generic aarch64 images to Release
-    #   uses: ncipollo/release-action@main
-    #   if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
-    #   with:
-    #     name: ${{ env.VER }} for ${{ env.PRODUCT_NAME }}
-    #     allowUpdates: true
-    #     removeArtifacts: false
-    #     replacesArtifacts: false
-    #     tag: ${{ env.PRODUCT_NAME }}
-    #     commit: main
-    #     token: ${{ secrets.GITHUB_TOKEN }}
-    #     artifacts: ${{ github.workspace }}/openwrt/bin/targets/armsr/armv8/*generic-*.img.gz
+    - name: Copy aarch64 images to real path
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/output/aarch64
+        cp -v $GITHUB_WORKSPACE/openwrt/bin/targets/armsr/armv8/*.img.gz $GITHUB_WORKSPACE/output/aarch64/ 2>/dev/null || echo "No .img.gz found"
+        ls -lh $GITHUB_WORKSPACE/output/aarch64/ 2>/dev/null || true
+
+    - name: Upload generic aarch64 images to Release
+      uses: ncipollo/release-action@main
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        name: ${{ env.VER }} for ${{ env.PRODUCT_NAME }}
+        allowUpdates: true
+        removeArtifacts: false
+        replacesArtifacts: false
+        tag: ${{ env.PRODUCT_NAME }}
+        commit: main
+        token: ${{ secrets.GITHUB_TOKEN }}
+        artifacts: ${{ github.workspace }}/output/aarch64/*.img.gz
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main

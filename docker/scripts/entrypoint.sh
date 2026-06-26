@@ -86,7 +86,7 @@ CONFIG_EXTERNAL_CPIO=""
 CONFIG_TARGET_ROOTFS_TARGZ=y
 CONFIG_TARGET_UBIFS_FREE_SPACE_FIXUP=y
 CONFIG_TARGET_UBIFS_JOURNAL_SIZE=""
-# CONFIG_TARGET_IMAGES_GZIP is not set
+CONFIG_TARGET_IMAGES_GZIP=y
 # CONFIG_TARGET_ROOTFS_PERSIST_VAR is not set
 ARM_IMG_EOF
 fi
@@ -274,7 +274,7 @@ case "${TARGET}" in
 
         # ----- 通用 aarch64 镜像也一起输出 -----
         echo ">>> Copying generic aarch64 images..."
-        cp -v /workdir/openwrt/bin/targets/armsr/armv8/*generic-*.img.gz "${OUTDIR}/" 2>/dev/null || echo "(no generic images)"
+        cp -v /workdir/openwrt/bin/targets/armsr/armv8/*.img.gz "${OUTDIR}/" 2>/dev/null || echo "(no .img.gz found)"
         ;;
 
     aarch64)
