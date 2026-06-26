@@ -396,6 +396,15 @@ jobs:
     # ║  编译产物: armsr/armv8/*.img.gz (EFI 引导 ARM 镜像)    ║
     # ║  适用: ARM 云服务器 / 虚拟机 / UEFI ARM 设备          ║
     # ╚══════════════════════════════════════════════════════╝
+    - name: Debug - List armsr/armv8 files
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        echo "========== armsr/armv8/ 目录内容 =========="
+        ls -lh $GITHUB_WORKSPACE/openwrt/bin/targets/armsr/armv8/ 2>/dev/null || echo "目录不存在"
+        echo ""
+        echo "========== *.img.gz 匹配结果 =========="
+        ls $GITHUB_WORKSPACE/openwrt/bin/targets/armsr/armv8/*.img.gz 2>/dev/null || echo "无 .img.gz 文件"
+
     - name: Copy aarch64 images to real path
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
