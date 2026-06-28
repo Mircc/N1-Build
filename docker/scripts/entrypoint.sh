@@ -206,6 +206,32 @@ CONFIG_PACKAGE_iw=y
 X86_PKG_EOF
 fi
 
+# ----- 第三方插件（所有平台通用） -----
+cat >> .config <<'PLUGINS_EOF'
+CONFIG_PACKAGE_luci-app-passwall=y
+CONFIG_PACKAGE_luci-app-passwall2=y
+CONFIG_PACKAGE_luci-app-openclash=y
+CONFIG_PACKAGE_luci-app-mosdns=y
+CONFIG_PACKAGE_luci-app-adguardhome=y
+CONFIG_PACKAGE_luci-app-homeproxy=y
+CONFIG_PACKAGE_luci-app-tailscale=y
+CONFIG_PACKAGE_luci-app-filebrowser=y
+CONFIG_PACKAGE_luci-app-netdata=y
+CONFIG_PACKAGE_luci-app-pushbot=y
+CONFIG_PACKAGE_luci-app-dockerman=y
+CONFIG_PACKAGE_luci-app-openlist2=y
+CONFIG_PACKAGE_luci-app-qbittorrent=y
+CONFIG_PACKAGE_qbittorrent-ee=y
+CONFIG_PACKAGE_rclone=y
+PLUGINS_EOF
+
+# ----- N1/aarch64 专用: amlogic 固件管理 -----
+if [ "${TARGET}" != "x86" ]; then
+    cat >> .config <<'AMLOGIC_EOF'
+CONFIG_PACKAGE_luci-app-amlogic=y
+AMLOGIC_EOF
+fi
+
 sed -i 's/^[ \t]*//g' ./.config
 make defconfig
 
