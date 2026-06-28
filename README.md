@@ -49,7 +49,6 @@
 ### 下载/文件服务
 - `luci-app-aria2` - Aria2下载
 - `luci-app-qbittorrent` - qBittorrent增强版
-- `luci-app-samba4` - Samba文件共享
 - `luci-app-openlist2` - OpenList文件列表
 - `rclone` - 云存储同步工具
 

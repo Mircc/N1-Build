@@ -159,8 +159,6 @@ if [ "${TARGET}" != "x86" ]; then
 CONFIG_PACKAGE_autocore-arm=y
 CONFIG_PACKAGE_automount=y
 CONFIG_PACKAGE_block-mount=y
-CONFIG_PACKAGE_samba4-utils=y
-CONFIG_PACKAGE_wsdd2=y
 CONFIG_PACKAGE_htop=y
 CONFIG_PACKAGE_libsensors=y
 CONFIG_PACKAGE_ariang=y
@@ -192,8 +190,6 @@ X86_NET_EOF
     cat >> .config <<'X86_PKG_EOF'
 CONFIG_PACKAGE_automount=y
 CONFIG_PACKAGE_block-mount=y
-CONFIG_PACKAGE_samba4-utils=y
-CONFIG_PACKAGE_wsdd2=y
 CONFIG_PACKAGE_htop=y
 CONFIG_PACKAGE_libsensors=y
 CONFIG_PACKAGE_ariang=y
