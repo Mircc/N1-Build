@@ -45,6 +45,7 @@ svn_export() {
 rm -rf feeds/luci/applications/luci-app-adguardhome
 rm -rf feeds/luci/applications/luci-app-cloudflared
 rm -rf feeds/luci/applications/luci-app-dockerman
+rm -rf feeds/luci/applications/luci-app-ddns-go
 rm -rf feeds/luci/applications/luci-app-homeproxy
 rm -rf feeds/luci/applications/luci-app-openclash
 rm -rf feeds/luci/applications/luci-app-filebrowser
@@ -55,6 +56,7 @@ rm -rf feeds/luci/applications/luci-app-passwall
 rm -rf feeds/packages/net/v2ray-geodata
 rm -rf feeds/packages/net/mosdns
 rm -rf feeds/packages/net/speedtest-cli
+rm -rf feeds/packages/net/ddns-go
 rm -rf feeds/packages/utils/docker
 rm -rf feeds/packages/utils/dockerd
 rm -rf feeds/packages/utils/containerd
@@ -63,22 +65,23 @@ rm -rf feeds/luci/themes/luci-theme-argon
 rm -rf feeds/luci/themes/luci-theme-design
 
 git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon feeds/luci/themes/luci-theme-argon
+git clone --depth 1 https://github.com/OldCoding/luci-app-kodexplorer package/luci-app-kodexplorer
 #git clone --depth 1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
 git clone --depth 1 https://github.com/zyqfork/luci-app-pushbot package/luci-app-pushbot
 git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
 git clone --depth 1 https://github.com/sbwml/v2ray-geodata package/v2ray-geodata
 git clone --depth 1 https://github.com/fw876/helloworld package/helloworld
-git clone --depth 1 https://github.com/Mircc/luci-app-adguardhome package/adguardhome
+git clone --depth 1 https://github.com/OldCoding/luci-app-adguardhome package/adguardhome
 git clone --depth 1 https://github.com/sbwml/luci-app-openlist2 package/openlist
 git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/openwrt-passwall-packages
-git clone --depth 1 https://github.com/Mircc/luci-app-filebrowser package/luci-app-filebrowser
-git clone --depth 1 https://github.com/Mircc/netspeedtest package/netspeedtest
+git clone --depth 1 https://github.com/OldCoding/luci-app-filebrowser package/luci-app-filebrowser
+git clone --depth 1 https://github.com/OldCoding/netspeedtest package/netspeedtest
 git clone --depth 1 https://github.com/papagaye744/luci-theme-design package/luci-theme-design
-git clone --depth 1 https://github.com/Mircc/luci-theme-glass package/luci-theme-glass
+git clone --depth 1 https://github.com/OldCoding/luci-theme-glass package/luci-theme-glass
 git clone --depth 1 https://github.com/sbwml/luci-app-dockerman feeds/luci/applications/luci-app-dockerman
 git clone --depth 1 https://github.com/immortalwrt/homeproxy package/luci-app-homeproxy
 git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
-git clone --depth 1 https://github.com/Mircc/OpenWrt-qBittorrent-Enhanced-Edition package/openwrt-qbee
+git clone --depth 1 https://github.com/OldCoding/OpenWrt-qBittorrent-Enhanced-Edition package/openwrt-qbee
 git clone --depth 1 https://github.com/sbwml/packages_utils_docker feeds/packages/utils/docker
 git clone --depth 1 https://github.com/sbwml/packages_utils_dockerd feeds/packages/utils/dockerd
 git clone --depth 1 https://github.com/sbwml/packages_utils_containerd feeds/packages/utils/containerd
@@ -97,6 +100,8 @@ svn_export "v5" "v2dat" "package/v2dat" "https://github.com/sbwml/luci-app-mosdn
 svn_export "master" "net/cloudflared" "feeds/packages/net/cloudflared" "https://github.com/openwrt/packages"
 svn_export "main" "easytier" "package/easytier" "https://github.com/EasyTier/luci-app-easytier"
 svn_export "main" "luci-app-easytier" "package/luci-app-easytier" "https://github.com/EasyTier/luci-app-easytier"
+svn_export "main" "luci-app-ddns-go" "package/luci-app-ddns-go" "https://github.com/OldCoding/luci-app-ddns-go"
+svn_export "main" "ddns-go" "package/ddns-go" "https://github.com/OldCoding/luci-app-ddns-go"
 
 sed -i "/mediaurlbase/d" package/luci-theme-design/root/etc/uci-defaults/30_luci-theme-design
 mv ./package/netspeedtest/* ./package/ && rm -rf ./package/netspeedtest
@@ -106,8 +111,8 @@ mv ./package/netdata/luci-app-netdata ./package/ && rm -rf ./package/netdata
 mv ./package/openwrt-qbee/* ./package/ && rm -rf ./package/openwrt-qbee
 
 # aria2补丁
-curl --create-dirs -o feeds/packages/net/aria2/patches/010-increase-max-connections-and-reduce-split-size.patch https://raw.githubusercontent.com/Mircc/aria2-patch/main/010-increase-max-connections-and-reduce-split-size.patch
-curl -o feeds/packages/net/ariang/Makefile https://raw.githubusercontent.com/Mircc/aria2-patch/main/Makefile
+curl --create-dirs -o feeds/packages/net/aria2/patches/010-increase-max-connections-and-reduce-split-size.patch https://raw.githubusercontent.com/OldCoding/aria2-patch/main/010-increase-max-connections-and-reduce-split-size.patch
+curl -o feeds/packages/net/ariang/Makefile https://raw.githubusercontent.com/OldCoding/aria2-patch/main/Makefile
 
 # turboacc 补丁
 curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
@@ -115,44 +120,6 @@ curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turbo
 # 安装插件
 ./scripts/feeds update -i
 ./scripts/feeds install -a
-
-# ===== 设置默认网络配置 =====
-echo "===== 设置默认网络配置 ====="
-mkdir -p files/etc/uci-defaults
-
-cat > files/etc/uci-defaults/99-set-default-ip << 'INNER_EOF'
-#!/bin/sh
-# 设置默认LAN IP
-uci set network.lan.ipaddr='192.168.50.200'
-uci set network.lan.netmask='255.255.255.0'
-uci set network.lan.gateway='192.168.50.1'
-uci set network.lan.dns='192.168.50.1'
-uci commit network
-# 旁路由模式：关闭 LAN DHCP（由主路由负责分配 IP）
-uci set dhcp.lan.ignore='1'
-uci set dhcp.lan.ra='disabled'
-uci set dhcp.lan.dhcpv6='disabled'
-uci commit dhcp
-# 设置系统主机名
-uci set system.@system[0].hostname='OpenWrt-N1'
-uci commit system
-exit 0
-INNER_EOF
-chmod +x files/etc/uci-defaults/99-set-default-ip
-
-# ===== 设置欢迎信息 =====
-mkdir -p files/etc
-cat > files/etc/banner << 'BANNER_EOF'
-
-  _______                        __  _______ _____
- |       |___   _____   ___  __|  ||   _   |  _  |
- |   -   |   | |     | |   |/ _  ||   |   |     |
- |_______|___| |__|__| |___|_____||___|___|__|__|
-        ImmortalWrt for N1/X86
-        Default IP: 192.168.50.200
-        User: root  Password: password
-
-BANNER_EOF
 
 # 调整菜单位置
 sed -i "s|services|nas|g" package/luci-app-openlist2/root/usr/share/luci/menu.d/luci-app-openlist2.json
@@ -162,12 +129,12 @@ sed -i "s|qidian|bilibili|g" package/luci-app-pushbot/root/usr/bin/pushbot/pushb
 # DNS劫持
 sed -i '/dns_redirect/d' package/network/services/dnsmasq/files/dhcp.conf
 # 个性化设置
-sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ Mircc build $(TZ=UTC-8 date "+%Y.%m.%d")')/g" $(find feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js")
-sed -i "s|breakingbadboy|Mircc|g" package/luci-app-amlogic/root/etc/config/amlogic
-sed -i "s|OpenWrt|N1-Build|g" package/luci-app-amlogic/root/etc/config/amlogic
+sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ Wing build $(TZ=UTC-8 date "+%Y.%m.%d")')/g" $(find feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js")
+sed -i "s|breakingbadboy|OldCoding|g" package/luci-app-amlogic/root/etc/config/amlogic
+sed -i "s|OpenWrt|openwrt_packit_arm|g" package/luci-app-amlogic/root/etc/config/amlogic
 sed -i "s|ARMv8|ARMv8-im|g" package/luci-app-amlogic/root/etc/config/amlogic
-sed -i "s|breakingbadboy|Mircc|g" package/luci-app-amlogic/luasrc/model/cbi/amlogic/amlogic_config.lua
-sed -i "s|OpenWrt|N1-Build|g" package/luci-app-amlogic/luasrc/model/cbi/amlogic/amlogic_config.lua
+sed -i "s|breakingbadboy|OldCoding|g" package/luci-app-amlogic/luasrc/model/cbi/amlogic/amlogic_config.lua
+sed -i "s|OpenWrt|openwrt_packit_arm|g" package/luci-app-amlogic/luasrc/model/cbi/amlogic/amlogic_config.lua
 sed -i "s|ARMv8|ARMv8-im|g" package/luci-app-amlogic/luasrc/model/cbi/amlogic/amlogic_config.lua
 cd package
 # NTP服务器
@@ -187,3 +154,38 @@ curl -sfL -o ./GeoIP.dat https://github.com/Loyalsoldier/v2ray-rules-dat/raw/rel
 mkdir ./core && cd ./core
 curl -sfL -o ./meta.tar.gz "$CORE_MATE" && tar -zxf ./meta.tar.gz && mv ./clash ./clash_meta
 chmod +x ./clash* ; rm -rf ./*.gz
+
+# ===== 设置默认网络配置 (请勿删除) =====
+echo "===== 设置默认网络配置 ====="
+mkdir -p files/etc/uci-defaults
+
+cat > files/etc/uci-defaults/99-set-default-ip << 'EOF'
+#!/bin/sh
+# 设置默认LAN IP
+uci set network.lan.ipaddr='192.168.50.200'
+uci set network.lan.netmask='255.255.255.0'
+uci set network.lan.gateway='192.168.50.1'
+uci set network.lan.dns='192.168.50.1'
+uci commit network
+# 设置系统主机名
+uci set system.@system[0].hostname='OpenWrt-N1'
+uci commit system
+exit 0
+EOF
+chmod +x files/etc/uci-defaults/99-set-default-ip
+
+# ===== 设置欢迎信息 =====
+mkdir -p files/etc
+
+cat > files/etc/banner << 'EOF'
+
+  _______                        __  _______ _____
+ |       |___   _____   ___  __|  ||   _   |  _  |
+ |   -   |   | |     | |   |/ _  ||   |   |     |
+ |_______|___| |__|__| |___|_____||___|___|__|__|
+        ImmortalWrt for N1/X86
+        Default IP: 192.168.50.200
+        User: root  Password: password
+
+EOF
+
