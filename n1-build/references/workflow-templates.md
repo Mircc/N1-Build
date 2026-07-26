@@ -1,0 +1,829 @@
+# Workflow Templates
+
+Complete GitHub Actions workflow templates for N1-Build.
+
+## build-n1.yml Template
+
+```yaml
+#
+# N1 ImmortalWrt Auto Build
+# Default IP: 192.168.50.200/24 Gateway/DNS: 192.168.50.1
+#
+name: Build N1 ImmortalWrt
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
+      release_tag:
+        description: 'Release tag (default auto-generate R日期)'
+        required: false
+        default: ''
+  schedule:
+    - cron: '0 20 8 * *'   # 每月9号 UTC 20:00 = Beijing 04:00
+  watch:
+    types: [started]
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: master
+  UPLOAD_FIRMWARE: false
+  UPLOAD_RELEASE: true
+  SWAP: false
+  DIY_SH: immo_diy.sh
+  TZ: Asia/Shanghai
+  FILE_NAME: openwrt_armvirt
+  PRODUCT_NAME: N1-ImmortalWrt
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    if: github.event.repository.owner.id == github.event.sender.id || github.event_name == 'schedule' || github.event_name == 'repository_dispatch'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@main
+
+    - name: Check server configuration
+      run: |
+        echo "警告⚠"
+        echo "若分配的服务器性能不足，务必及时取消，重新运行！"
+        echo "CPU性能：7763 > 8370C > 8171M > 8272CL > E5系列"
+        echo -e "-------------- ------------CPU信息------------------------------------------\n"
+        echo -e "CPU核心及版本信息：$(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
+        echo "-------------------------------内存信息-------------------------------------------"
+        echo "已安装内存详细信息："
+        sudo lshw -short -C memory | grep GiB
+        echo -e "\n"
+        echo "-----------------------------硬盘信息---------------------------------------------"
+        echo -e  "硬盘数量：$(ls /dev/sd* | grep -v [1-9] | wc -l) \n"
+        echo "硬盘详情："
+        df -Th
+
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo swapoff -a
+        sudo rm -f /swapfile /mnt/swapfile
+        sudo docker image prune -a -f
+        sudo systemctl stop docker
+        [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
+        sudo -E apt update
+        sudo -E apt -y install $(curl -fsSL https://ophub.org/ubuntu2204-make-openwrt-depends)
+        sudo -E apt-get -qq install libfuse-dev
+        sudo -E apt -y autoremove --purge
+        sudo -E systemctl daemon-reload
+        sudo -E apt clean && sudo -E apt autoclean
+        sudo timedatectl set-timezone "$TZ"
+        echo "status=success" >> ${GITHUB_OUTPUT}
+        df -Th
+
+    - name: Create Swap
+      if: env.SWAP == 'true'
+      run: |
+        sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=8192
+        sudo chmod 600 /mnt/swapfile
+        sudo mkswap /mnt/swapfile
+        sudo swapon /mnt/swapfile
+        free -h | grep -i swap
+
+    - name: Create simulated physical disk
+      run: |
+        mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
+        root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
+        sudo truncate -s "${mnt_size}"G /mnt/mnt.img
+        sudo truncate -s "${root_size}"G /root.img
+        sudo losetup /dev/loop6 /mnt/mnt.img
+        sudo losetup /dev/loop7 /root.img
+        sudo pvcreate /dev/loop6
+        sudo pvcreate /dev/loop7
+        sudo vgcreate github /dev/loop6 /dev/loop7
+        sudo lvcreate -n runner -l 100%FREE github
+        sudo mkfs.xfs /dev/github/runner
+        sudo mkdir -p /workdir
+        sudo mount /dev/github/runner /workdir
+        sudo chown -R runner.runner /workdir
+        df -Th
+
+    - name: Clone source code
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        cd openwrt
+        useVersionInfo=$(git show -s --date=short --format="Author: %an<br/>date: %cd<br/>commit: %s<br/>commit hash: %H<br/>")
+        echo "useVersionInfo=$useVersionInfo" >> $GITHUB_ENV
+        echo "DATE=$(date "+%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
+        echo "DATE1=$(date "+%Y-%m-%d")" >> $GITHUB_ENV
+        echo "KERNEL_VER=$(cat $GITHUB_WORKSPACE/KernelVersion)" >> $GITHUB_ENV
+        echo "VER=R$(date +%Y.%m.%d)" >> $GITHUB_ENV
+        sed -i "/video/d" feeds.conf.default
+
+    - name: Update feeds
+      run: cd openwrt && ./scripts/feeds update -a
+
+    - name: Run DIY script (添加软件源 & 配置插件)
+      run: |
+        chmod +x $DIY_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_SH
+
+    - name: Generate configuration file
+      run: |
+        cd openwrt
+        rm -f ./.config*
+        touch ./.config
+
+        # 编译ARM固件:
+        cat >> .config <<EOF
+        CONFIG_TARGET_armsr=y
+        CONFIG_TARGET_armsr_armv8=y
+        CONFIG_TARGET_armsr_armv8_DEVICE_generic=y
+        CONFIG_TARGET_ARCH_PACKAGES="aarch64_generic"
+        CONFIG_DEFAULT_TARGET_OPTIMIZATION="-Os -pipe -mcpu=generic"
+        CONFIG_CPU_TYPE="generic"
+        EOF
+
+        # USB2.0/3.0支持:
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_kmod-usb-core=y
+        CONFIG_PACKAGE_kmod-usb-dwc2=y
+        CONFIG_PACKAGE_kmod-usb-dwc3=y
+        CONFIG_PACKAGE_kmod-usb-ehci=y
+        CONFIG_PACKAGE_kmod-usb-storage=y
+        CONFIG_PACKAGE_kmod-usb-storage-extras=y
+        CONFIG_PACKAGE_kmod-usb-storage-uas=y
+        CONFIG_PACKAGE_kmod-usb-xhci-hcd=y
+        CONFIG_PACKAGE_kmod-usb-ohci=y
+        CONFIG_PACKAGE_kmod-usb2=y
+        CONFIG_PACKAGE_kmod-usb3=y
+        EOF
+
+        # IPv6支持:
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y
+        CONFIG_PACKAGE_ip6tables-extra=y
+        CONFIG_PACKAGE_ip6tables-mod-nat=y
+        CONFIG_PACKAGE_ipv6helper=y
+        EOF
+
+        # LuCI主题:
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_luci-theme-argon=y
+        CONFIG_PACKAGE_luci-app-argon-config=y
+        CONFIG_PACKAGE_luci-theme-design=y
+        CONFIG_PACKAGE_luci-theme-glass=y
+        EOF
+
+        # 镜像设置（armsr 必须显式设置根分区大小，否则默认 160MB 装不下插件 → out of space）
+        cat >> .config <<EOF
+        CONFIG_TARGET_ROOTFS_TARGZ=y
+        CONFIG_TARGET_IMAGES_GZIP=y
+        CONFIG_TARGET_ROOTFS_PARTSIZE=1024
+        EOF
+
+        # 必备软件包:
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_php8=y
+        CONFIG_PHP8_LIBXML=y
+        CONFIG_PHP8_DOM=y
+        CONFIG_PHP8_GETTEXT=y
+        CONFIG_PHP8_INTL=y
+        CONFIG_PHP8_SYSTEMTZDATA=y
+        CONFIG_PACKAGE_perl=y
+        CONFIG_PACKAGE_perl-http-date=y
+        CONFIG_PACKAGE_perlbase-file=y
+        CONFIG_PACKAGE_perlbase-getopt=y
+        CONFIG_PACKAGE_perlbase-time=y
+        CONFIG_PACKAGE_perlbase-unicode=y
+        CONFIG_PACKAGE_perlbase-utf8=y
+        CONFIG_PACKAGE_blkid=y
+        CONFIG_PACKAGE_fdisk=y
+        CONFIG_PACKAGE_lsblk=y
+        CONFIG_PACKAGE_parted=y
+        CONFIG_PACKAGE_attr=y
+        CONFIG_PACKAGE_btrfs-progs=y
+        CONFIG_BTRFS_PROGS_ZSTD=y
+        CONFIG_PACKAGE_chattr=y
+        CONFIG_PACKAGE_dosfstools=y
+        CONFIG_PACKAGE_e2fsprogs=y
+        CONFIG_PACKAGE_f2fs-tools=y
+        CONFIG_PACKAGE_f2fsck=y
+        CONFIG_PACKAGE_lsattr=y
+        CONFIG_PACKAGE_mkf2fs=y
+        CONFIG_PACKAGE_xfs-fsck=y
+        CONFIG_PACKAGE_xfs-mkfs=y
+        CONFIG_PACKAGE_bsdtar=y
+        CONFIG_PACKAGE_bash=y
+        CONFIG_PACKAGE_gawk=y
+        CONFIG_PACKAGE_getopt=y
+        CONFIG_PACKAGE_losetup=y
+        CONFIG_PACKAGE_tar=y
+        CONFIG_PACKAGE_uuidgen=y
+        EOF
+
+        # 可选软件包
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_autocore-arm=y
+        CONFIG_PACKAGE_automount=y
+        CONFIG_PACKAGE_block-mount=y
+        CONFIG_PACKAGE_htop=y
+        CONFIG_PACKAGE_libsensors=y
+        CONFIG_PACKAGE_ariang=y
+        CONFIG_PACKAGE_bind-host=y
+        CONFIG_PACKAGE_default-settings-chn=y
+        CONFIG_PACKAGE_ca-certificates=y
+        CONFIG_PACKAGE_lsof=y
+        CONFIG_PACKAGE_acpid=y
+        CONFIG_PACKAGE_hostapd-common=y
+        CONFIG_PACKAGE_kmod-sched-red=y
+        CONFIG_PACKAGE_smartmontools-drivedb=y
+        CONFIG_PACKAGE_pigz=y
+        CONFIG_PACKAGE_iw=y
+        EOF
+
+        sed -i 's/^[ \t]*//g' ./.config
+        make defconfig
+
+    - name: Download package
+      id: package
+      run: |
+        cd openwrt
+        make download -j8
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+        rm -rf $GITHUB_WORKSPACE/.git
+        rm -rf $GITHUB_WORKSPACE/opt
+        df -Th
+
+    - name: Compile the firmware
+      id: compile
+      run: |
+        cd openwrt
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc)
+        echo "status=success" >> ${GITHUB_OUTPUT}
+        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    - name: Compile debug
+      if: ${{ failure() && steps.compile.conclusion == 'failure' }}
+      run: |
+        cd openwrt
+        echo -e "1 thread compile debug"
+        make -j1 V=s
+
+    - name: Clean up server space
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        df -hT
+        cd openwrt
+        cp -f .config bin/config
+        echo "开始清理空间"
+        sudo rm -rf $(ls . | grep -v "^bin$" | xargs) 2>/dev/null
+        df -hT
+
+    - name: Organize files
+      id: organize
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        cd $GITHUB_WORKSPACE/openwrt/bin/packages
+        tar -zcvf Packages.tar.gz ./*
+        cp Packages.tar.gz $GITHUB_WORKSPACE/openwrt/bin
+        cd $GITHUB_WORKSPACE/openwrt/bin/targets/*/*
+        rm -rf packages
+        echo "status=success" >> ${GITHUB_OUTPUT}
+
+    - name: Package Armvirt as OpenWrt (N1)
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      uses: OldCoding/amlogic-s9xxx-openwrt@main
+      with:
+        openwrt_path: openwrt/bin/targets/*/*/*.tar.gz
+        kernel_usage: stable
+        openwrt_board: s905d
+        kernel_repo: OldCoding/openwrt_packit_arm
+        openwrt_kernel: ${{ env.KERNEL_VER }}
+        auto_kernel: true
+        builder_name: Mircc
+
+    - name: Calculate MD5
+      run: |
+        cp $GITHUB_WORKSPACE/openwrt/bin/Packages.tar.gz ${{ env.PACKAGED_OUTPUTPATH }}
+        cp $GITHUB_WORKSPACE/openwrt/bin/config ${{ env.PACKAGED_OUTPUTPATH }}/config-immo.txt
+        cd ${{ env.PACKAGED_OUTPUTPATH }} && rm -rf sha256sums
+        MD5=$(md5sum *.gz | sed ':a;N;$!ba;s/\n/<br>/g')
+        echo "MD5=$MD5" >> $GITHUB_ENV
+
+    - name: Upload OpenWrt Firmware to Release
+      id: release
+      uses: ncipollo/release-action@main
+      if: env.PACKAGED_STATUS == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        name: ${{ env.VER }} for ${{ env.PRODUCT_NAME }}
+        allowUpdates: true
+        removeArtifacts: true
+        tag: ${{ env.PRODUCT_NAME }}
+        commit: main
+        token: ${{ secrets.GITHUB_TOKEN }}
+        artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
+        body: |
+          # 📦 ImmortalWrt for N1 (s905d) 固件
+
+          ## 🔧 默认信息
+          | 项目 | 值 |
+          |------|-----|
+          | 默认 IP | `192.168.50.200` |
+          | 子网掩码 | `255.255.255.0` |
+          | 网关 | `192.168.50.1` |
+          | DNS | `192.168.50.1` |
+          | 默认用户 | `root` |
+          | 默认密码 | `password` |
+          | 源码分支 | `${{ env.REPO_BRANCH }}` |
+          | 内核版本 | `${{ env.KERNEL_VER }}` |
+          | 编译日期 | `${{ env.DATE1 }}` |
+
+          ## 📝 主源码最近提交
+          ${{ env.useVersionInfo }}
+
+          ## 📥 使用说明
+          1. 下载 `.img.gz` 文件，解压得到 `.img`
+          2. 使用 [晶晨宝盒](https://github.com/ophub/amlogic-s9xxx-openwrt) 或 USB Burning Tool 刷入 N1
+          3. 首次启动后访问 `http://192.168.50.200`
+
+          ## ✅ MD5 校验
+          下载后请仔细校验MD5，如不正确请重新下载
+          `md5sum`
+          > ${{ env.MD5 }}
+
+          > ⚠️ 刷机有风险，操作需谨慎！
+
+    # ╔══════════════════════════════════════════════════════╗
+    # ║  通用 aarch64 镜像上传 (armsr/armv8/*.img.gz)          ║
+    # ╚══════════════════════════════════════════════════════╝
+    - name: Debug - List armsr/armv8 files
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        ls -lh $GITHUB_WORKSPACE/openwrt/bin/targets/armsr/armv8/ 2>/dev/null || echo "目录不存在"
+        ls $GITHUB_WORKSPACE/openwrt/bin/targets/armsr/armv8/*.img.gz 2>/dev/null || echo "无 .img.gz 文件"
+
+    - name: Copy aarch64 images to real path
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/output/aarch64
+        cp -v $GITHUB_WORKSPACE/openwrt/bin/targets/armsr/armv8/*.img.gz $GITHUB_WORKSPACE/output/aarch64/ 2>/dev/null || echo "No .img.gz found"
+        ls -lh $GITHUB_WORKSPACE/output/aarch64/ 2>/dev/null || true
+
+    - name: Upload generic aarch64 images to Release
+      uses: ncipollo/release-action@main
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        name: ${{ env.VER }} for ${{ env.PRODUCT_NAME }}
+        allowUpdates: true
+        removeArtifacts: false
+        replacesArtifacts: false
+        tag: ${{ env.PRODUCT_NAME }}
+        commit: main
+        token: ${{ secrets.GITHUB_TOKEN }}
+        artifacts: ${{ github.workspace }}/output/aarch64/*.img.gz
+
+    - name: Delete workflow runs
+      uses: Mattraks/delete-workflow-runs@main
+      with:
+        token: ${{ github.token }}
+        repository: ${{ github.repository }}
+        retain_days: 60
+        keep_minimum_runs: 60
+```
+
+## build-x86.yml Template
+
+```yaml
+#
+# X86_64 ImmortalWrt Auto Build
+# Default IP: 192.168.50.200/24 Gateway/DNS: 192.168.50.1
+#
+name: Build X86_64 ImmortalWrt
+
+on:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
+      release_tag:
+        description: 'Release tag (default auto-generate R日期)'
+        required: false
+        default: ''
+  schedule:
+    - cron: '0 21 8 * *'   # 每月9号 UTC 21:00 = Beijing 05:00
+  watch:
+    types: [started]
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: master
+  UPLOAD_FIRMWARE: false
+  UPLOAD_RELEASE: true
+  SWAP: false
+  DIY_SH: immo_diy.sh
+  TZ: Asia/Shanghai
+  FILE_NAME: openwrt_x86_64
+  PRODUCT_NAME: X86-ImmortalWrt
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    if: github.event.repository.owner.id == github.event.sender.id || github.event_name == 'schedule' || github.event_name == 'repository_dispatch'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@main
+
+    - name: Check server configuration
+      run: |
+        echo "警告⚠"
+        echo "若分配的服务器性能不足，务必及时取消，重新运行！"
+        echo "CPU性能：7763 > 8370C > 8171M > 8272CL > E5系列"
+        echo -e "-------------- ------------CPU信息------------------------------------------\n"
+        echo -e "CPU核心及版本信息：$(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
+        echo "-------------------------------内存信息-------------------------------------------"
+        echo "已安装内存详细信息："
+        sudo lshw -short -C memory | grep GiB
+        echo -e "\n"
+        echo "-----------------------------硬盘信息---------------------------------------------"
+        echo -e  "硬盘数量：$(ls /dev/sd* | grep -v [1-9] | wc -l) \n"
+        echo "硬盘详情："
+        df -Th
+
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo swapoff -a
+        sudo rm -f /swapfile /mnt/swapfile
+        sudo docker image prune -a -f
+        sudo systemctl stop docker
+        [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
+        sudo -E apt update
+        sudo -E apt -y install $(curl -fsSL https://ophub.org/ubuntu2204-make-openwrt-depends)
+        sudo -E apt-get -qq install libfuse-dev
+        sudo -E apt -y autoremove --purge
+        sudo -E systemctl daemon-reload
+        sudo -E apt clean && sudo -E apt autoclean
+        sudo timedatectl set-timezone "$TZ"
+        echo "status=success" >> ${GITHUB_OUTPUT}
+        df -Th
+
+    - name: Create Swap
+      if: env.SWAP == 'true'
+      run: |
+        sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=8192
+        sudo chmod 600 /mnt/swapfile
+        sudo mkswap /mnt/swapfile
+        sudo swapon /mnt/swapfile
+        free -h | grep -i swap
+
+    - name: Create simulated physical disk
+      run: |
+        mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
+        root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
+        sudo truncate -s "${mnt_size}"G /mnt/mnt.img
+        sudo truncate -s "${root_size}"G /root.img
+        sudo losetup /dev/loop6 /mnt/mnt.img
+        sudo losetup /dev/loop7 /root.img
+        sudo pvcreate /dev/loop6
+        sudo pvcreate /dev/loop7
+        sudo vgcreate github /dev/loop6 /dev/loop7
+        sudo lvcreate -n runner -l 100%FREE github
+        sudo mkfs.xfs /dev/github/runner
+        sudo mkdir -p /workdir
+        sudo mount /dev/github/runner /workdir
+        sudo chown -R runner.runner /workdir
+        df -Th
+
+    - name: Clone source code
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        cd openwrt
+        useVersionInfo=$(git show -s --date=short --format="Author: %an<br/>date: %cd<br/>commit: %s<br/>commit hash: %H<br/>")
+        echo "useVersionInfo=$useVersionInfo" >> $GITHUB_ENV
+        echo "DATE=$(date "+%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
+        echo "DATE1=$(date "+%Y-%m-%d")" >> $GITHUB_ENV
+        echo "VER=R$(date +%Y.%m.%d)" >> $GITHUB_ENV
+        sed -i "/video/d" feeds.conf.default
+
+    - name: Update feeds
+      run: cd openwrt && ./scripts/feeds update -a
+
+    - name: Run DIY script (添加软件源 & 配置插件)
+      run: |
+        chmod +x $DIY_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_SH
+
+    - name: Generate configuration file
+      run: |
+        cd openwrt
+        rm -f ./.config*
+        touch ./.config
+
+        # 编译X86_64固件:
+        cat >> .config <<EOF
+        CONFIG_TARGET_x86=y
+        CONFIG_TARGET_x86_64=y
+        CONFIG_TARGET_x86_64_DEVICE_generic=y
+        CONFIG_TARGET_ARCH_PACKAGES="x86_64"
+        CONFIG_DEFAULT_TARGET_OPTIMIZATION="-Os -pipe -march=nehalem"
+        CONFIG_CPU_TYPE="nehalem"
+        EOF
+
+        # 镜像格式：EFI + SquashFS + GZIP
+        cat >> .config <<EOF
+        CONFIG_TARGET_ROOTFS_SQUASHFS=y
+        CONFIG_TARGET_IMAGES_GZIP=y
+        CONFIG_TARGET_EFI_IMAGES=y
+        CONFIG_TARGET_KERNEL_PARTSIZE=64
+        CONFIG_TARGET_ROOTFS_PARTSIZE=1024
+        EOF
+
+        # USB支持:
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_kmod-usb-core=y
+        CONFIG_PACKAGE_kmod-usb-dwc2=y
+        CONFIG_PACKAGE_kmod-usb-dwc3=y
+        CONFIG_PACKAGE_kmod-usb-ehci=y
+        CONFIG_PACKAGE_kmod-usb-storage=y
+        CONFIG_PACKAGE_kmod-usb-storage-extras=y
+        CONFIG_PACKAGE_kmod-usb-storage-uas=y
+        CONFIG_PACKAGE_kmod-usb-xhci-hcd=y
+        CONFIG_PACKAGE_kmod-usb-ohci=y
+        CONFIG_PACKAGE_kmod-usb2=y
+        CONFIG_PACKAGE_kmod-usb3=y
+        EOF
+
+        # IPv6支持:
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y
+        CONFIG_PACKAGE_ip6tables-extra=y
+        CONFIG_PACKAGE_ip6tables-mod-nat=y
+        CONFIG_PACKAGE_ipv6helper=y
+        EOF
+
+        # LuCI主题:
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_luci-theme-argon=y
+        CONFIG_PACKAGE_luci-app-argon-config=y
+        CONFIG_PACKAGE_luci-theme-design=y
+        CONFIG_PACKAGE_luci-theme-glass=y
+        EOF
+
+        # 必备软件包:
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_php8=y
+        CONFIG_PHP8_LIBXML=y
+        CONFIG_PHP8_DOM=y
+        CONFIG_PHP8_GETTEXT=y
+        CONFIG_PHP8_INTL=y
+        CONFIG_PHP8_SYSTEMTZDATA=y
+        CONFIG_PACKAGE_perl=y
+        CONFIG_PACKAGE_perl-http-date=y
+        CONFIG_PACKAGE_perlbase-file=y
+        CONFIG_PACKAGE_perlbase-getopt=y
+        CONFIG_PACKAGE_perlbase-time=y
+        CONFIG_PACKAGE_perlbase-unicode=y
+        CONFIG_PACKAGE_perlbase-utf8=y
+        CONFIG_PACKAGE_blkid=y
+        CONFIG_PACKAGE_fdisk=y
+        CONFIG_PACKAGE_lsblk=y
+        CONFIG_PACKAGE_parted=y
+        CONFIG_PACKAGE_attr=y
+        CONFIG_PACKAGE_btrfs-progs=y
+        CONFIG_BTRFS_PROGS_ZSTD=y
+        CONFIG_PACKAGE_chattr=y
+        CONFIG_PACKAGE_dosfstools=y
+        CONFIG_PACKAGE_e2fsprogs=y
+        CONFIG_PACKAGE_f2fs-tools=y
+        CONFIG_PACKAGE_f2fsck=y
+        CONFIG_PACKAGE_lsattr=y
+        CONFIG_PACKAGE_mkf2fs=y
+        CONFIG_PACKAGE_xfs-fsck=y
+        CONFIG_PACKAGE_xfs-mkfs=y
+        CONFIG_PACKAGE_bsdtar=y
+        CONFIG_PACKAGE_bash=y
+        CONFIG_PACKAGE_gawk=y
+        CONFIG_PACKAGE_getopt=y
+        CONFIG_PACKAGE_losetup=y
+        CONFIG_PACKAGE_tar=y
+        CONFIG_PACKAGE_uuidgen=y
+        EOF
+
+        # X86 网络驱动
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_kmod-igb=y
+        CONFIG_PACKAGE_kmod-igc=y
+        CONFIG_PACKAGE_kmod-e1000=y
+        CONFIG_PACKAGE_kmod-e1000e=y
+        CONFIG_PACKAGE_kmod-ixgbe=y
+        CONFIG_PACKAGE_kmod-r8169=y
+        CONFIG_PACKAGE_kmod-mii=y
+        EOF
+
+        # 可选软件包
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_automount=y
+        CONFIG_PACKAGE_block-mount=y
+        CONFIG_PACKAGE_htop=y
+        CONFIG_PACKAGE_libsensors=y
+        CONFIG_PACKAGE_ariang=y
+        CONFIG_PACKAGE_bind-host=y
+        CONFIG_PACKAGE_default-settings-chn=y
+        CONFIG_PACKAGE_ca-certificates=y
+        CONFIG_PACKAGE_lsof=y
+        CONFIG_PACKAGE_acpid=y
+        CONFIG_PACKAGE_hostapd-common=y
+        CONFIG_PACKAGE_kmod-sched-red=y
+        CONFIG_PACKAGE_smartmontools-drivedb=y
+        CONFIG_PACKAGE_pigz=y
+        CONFIG_PACKAGE_iw=y
+        EOF
+
+        sed -i 's/^[ \t]*//g' ./.config
+        make defconfig
+
+    - name: Download package
+      id: package
+      run: |
+        cd openwrt
+        make download -j8
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+        rm -rf $GITHUB_WORKSPACE/.git
+        rm -rf $GITHUB_WORKSPACE/opt
+        df -Th
+
+    - name: Compile the firmware
+      id: compile
+      run: |
+        cd openwrt
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc)
+        echo "status=success" >> ${GITHUB_OUTPUT}
+        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    - name: Compile debug
+      if: ${{ failure() && steps.compile.conclusion == 'failure' }}
+      run: |
+        cd openwrt
+        echo -e "1 thread compile debug"
+        make -j1 V=s
+
+    - name: Clean up server space
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        df -hT
+        cd openwrt
+        cp -f .config bin/config
+        echo "开始清理空间"
+        sudo rm -rf $(ls . | grep -v "^bin$" | xargs) 2>/dev/null
+        df -hT
+
+    - name: Organize files
+      id: organize
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        cd openwrt/bin/packages
+        tar -zcvf Packages.tar.gz ./*
+        cp Packages.tar.gz $GITHUB_WORKSPACE/openwrt/bin
+        cd $GITHUB_WORKSPACE/openwrt/bin/targets/x86/64
+        rm -rf packages
+        echo "status=success" >> ${GITHUB_OUTPUT}
+
+    - name: Calculate MD5
+      if: steps.organize.outputs.status == 'success'
+      run: |
+        cd $GITHUB_WORKSPACE/openwrt/bin/targets/x86/64
+        md5sum *combined-efi.img.gz > md5sums.txt 2>/dev/null || true
+        cat md5sums.txt
+        MD5=$(md5sum *combined-efi.img.gz | sed ':a;N;$!ba;s/\n/<br>/g')
+        echo "MD5=$MD5" >> $GITHUB_ENV
+
+    - name: Upload OpenWrt Firmware to Release
+      id: release
+      uses: ncipollo/release-action@main
+      if: steps.organize.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        name: ${{ env.VER }} for ${{ env.PRODUCT_NAME }}
+        allowUpdates: true
+        removeArtifacts: true
+        tag: ${{ env.PRODUCT_NAME }}
+        commit: main
+        token: ${{ secrets.GITHUB_TOKEN }}
+        artifacts: ${{ github.workspace }}/openwrt/bin/targets/x86/64/*
+        body: |
+          # 🖥️ ImmortalWrt for X86_64 固件
+
+          ## 🔧 默认信息
+          | 项目 | 值 |
+          |------|-----|
+          | 默认 IP | `192.168.50.200` |
+          | 子网掩码 | `255.255.255.0` |
+          | 网关 | `192.168.50.1` |
+          | DNS | `192.168.50.1` |
+          | 默认用户 | `root` |
+          | 默认密码 | `password` |
+          | 源码分支 | `${{ env.REPO_BRANCH }}` |
+          | 编译日期 | `${{ env.DATE1 }}` |
+
+          ## 📝 主源码最近提交
+          ${{ env.useVersionInfo }}
+
+          ## 📥 使用说明
+          1. 下载 `*combined-efi.img.gz`，解压得到 `.img`
+          2. 用工具（如 Rufus、balenaEtcher）写入 U 盘或 SSD
+          3. 从 U 盘/SSD 启动，首次启动后访问 `http://192.168.50.200`
+          4. 建议在 LuCI 里设置好自己的网络后再投入生产使用
+
+          ## ✅ MD5 校验
+          下载后请仔细校验MD5，如不正确请重新下载
+          `md5sum`
+          > ${{ env.MD5 }}
+
+          > ⚠️ 刷机有风险，操作需谨慎！
+
+    - name: Delete workflow runs
+      uses: Mattraks/delete-workflow-runs@main
+      with:
+        token: ${{ github.token }}
+        repository: ${{ github.repository }}
+        retain_days: 60
+        keep_minimum_runs: 60
+```
+
+## sync-upstream.yml Template
+
+```yaml
+#
+# 自动同步 OldCoding/openwrt_packit_arm 的 immo_diy.sh
+# 每月1号/15号北京时间 18:00 自动运行，有更新则自动合并（保留默认IP配置）
+#
+name: Sync upstream immo_diy.sh
+
+on:
+  schedule:
+    - cron: '0 10 1,15 * *'   # 每月1号/15号 UTC 10:00 = 北京时间 18:00
+  workflow_dispatch:          # 允许手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run sync script
+        id: sync
+        run: |
+          python3 scripts/sync_immo_diy.py
+        continue-on-error: true
+
+      - name: Commit and push changes
+        if: steps.sync.outcome == 'success'
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add immo_diy.sh
+          git commit -m "Sync upstream immo_diy.sh from OldCoding/openwrt_packit_arm"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "⚠️ Upstream sync failed",
+              body: "The automatic sync of `immo_diy.sh` from upstream failed. Please check the [workflow run](" + context.serverUrl + "/" + context.repo.owner + "/" + context.repo.repo + "/actions/runs/" + context.runId + ") for details."
+            })
+```
