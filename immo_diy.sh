@@ -46,7 +46,6 @@ rm -rf feeds/luci/applications/luci-app-adguardhome
 rm -rf feeds/luci/applications/luci-app-cloudflared
 rm -rf feeds/luci/applications/luci-app-dockerman
 rm -rf feeds/luci/applications/luci-app-ddns-go
-rm -rf feeds/luci/applications/luci-app-homeproxy
 rm -rf feeds/luci/applications/luci-app-openclash
 rm -rf feeds/luci/applications/luci-app-filebrowser
 rm -rf feeds/luci/applications/luci-app-nlbwmon
@@ -65,9 +64,10 @@ rm -rf feeds/luci/themes/luci-theme-argon
 rm -rf feeds/luci/themes/luci-theme-design
 
 git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon feeds/luci/themes/luci-theme-argon
+git clone --depth 1 https://github.com/LazuliKao/luci-theme-fluent feeds/luci/themes/luci-theme-fluent
 git clone --depth 1 https://github.com/OldCoding/luci-app-kodexplorer package/luci-app-kodexplorer
 #git clone --depth 1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
-git clone --depth 1 https://github.com/zyqfork/luci-app-pushbot package/luci-app-pushbot
+git clone --depth 1 https://github.com/zzsj0928/luci-app-pushbot package/luci-app-pushbot
 git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
 git clone --depth 1 https://github.com/sbwml/v2ray-geodata package/v2ray-geodata
 git clone --depth 1 https://github.com/fw876/helloworld package/helloworld
@@ -77,16 +77,14 @@ git clone --depth 1 https://github.com/Openwrt-Passwall/openwrt-passwall-package
 git clone --depth 1 https://github.com/OldCoding/luci-app-filebrowser package/luci-app-filebrowser
 git clone --depth 1 https://github.com/OldCoding/netspeedtest package/netspeedtest
 git clone --depth 1 https://github.com/papagaye744/luci-theme-design package/luci-theme-design
-git clone --depth 1 https://github.com/OldCoding/luci-theme-glass package/luci-theme-glass
 git clone --depth 1 https://github.com/sbwml/luci-app-dockerman feeds/luci/applications/luci-app-dockerman
-git clone --depth 1 https://github.com/immortalwrt/homeproxy package/luci-app-homeproxy
-git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
 git clone --depth 1 https://github.com/OldCoding/OpenWrt-qBittorrent-Enhanced-Edition package/openwrt-qbee
 git clone --depth 1 https://github.com/sbwml/packages_utils_docker feeds/packages/utils/docker
 git clone --depth 1 https://github.com/sbwml/packages_utils_dockerd feeds/packages/utils/dockerd
 git clone --depth 1 https://github.com/sbwml/packages_utils_containerd feeds/packages/utils/containerd
 git clone --depth 1 https://github.com/sbwml/packages_utils_runc feeds/packages/utils/runc
-svn_export "master" "luci-app-tailscale-community" "package/luci-app-tailscale" "https://github.com/Tokisaki-Galaxy/luci-app-tailscale-community"
+git clone --depth 1 https://github.com/svenshi/luci-app-oxidns package/luci-app-oxidns
+svn_export "master" "luci-app-tailscale-community" "package/luci-app-tailscale-community" "https://github.com/Tokisaki-Galaxy/luci-app-tailscale-community"
 svn_export "master" "applications/luci-app-cloudflared" "feeds/luci/applications/luci-app-cloudflared" "https://github.com/openwrt/luci"
 svn_export "main" "luci-app-bandix" "package/luci-app-bandix" "https://github.com/timsaya/luci-app-bandix"
 svn_export "main" "openwrt-bandix" "package/openwrt-bandix" "https://github.com/timsaya/openwrt-bandix"
@@ -103,6 +101,10 @@ svn_export "main" "luci-app-easytier" "package/luci-app-easytier" "https://githu
 svn_export "main" "luci-app-ddns-go" "package/luci-app-ddns-go" "https://github.com/OldCoding/luci-app-ddns-go"
 svn_export "main" "ddns-go" "package/ddns-go" "https://github.com/OldCoding/luci-app-ddns-go"
 
+# aria2补丁
+curl --create-dirs -o feeds/packages/net/aria2/patches/010-increase-max-connections-and-reduce-split-size.patch https://raw.githubusercontent.com/OldCoding/aria2-patch/main/010-increase-max-connections-and-reduce-split-size.patch
+curl -o feeds/packages/net/ariang/Makefile https://raw.githubusercontent.com/OldCoding/aria2-patch/main/Makefile
+
 sed -i "/mediaurlbase/d" package/luci-theme-design/root/etc/uci-defaults/30_luci-theme-design
 mv ./package/netspeedtest/* ./package/ && rm -rf ./package/netspeedtest
 mv ./package/openlist/* ./package/ && rm -rf ./package/openlist
@@ -110,12 +112,9 @@ mv ./package/adguardhome/* ./package/ && rm -rf ./package/adguardhome
 mv ./package/netdata/luci-app-netdata ./package/ && rm -rf ./package/netdata
 mv ./package/openwrt-qbee/* ./package/ && rm -rf ./package/openwrt-qbee
 
-# aria2补丁
-curl --create-dirs -o feeds/packages/net/aria2/patches/010-increase-max-connections-and-reduce-split-size.patch https://raw.githubusercontent.com/OldCoding/aria2-patch/main/010-increase-max-connections-and-reduce-split-size.patch
-curl -o feeds/packages/net/ariang/Makefile https://raw.githubusercontent.com/OldCoding/aria2-patch/main/Makefile
-
 # turboacc 补丁
-curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
+curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
+#curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 
 # 安装插件
 ./scripts/feeds update -i
@@ -123,7 +122,7 @@ curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turbo
 
 # 调整菜单位置
 sed -i "s|services|nas|g" package/luci-app-openlist2/root/usr/share/luci/menu.d/luci-app-openlist2.json
-sed -i "s|services|vpn|g" package/luci-app-tailscale/root/usr/share/luci/menu.d/luci-app-tailscale-community.json
+sed -i "s|services|vpn|g" package/luci-app-tailscale-community/root/usr/share/luci/menu.d/luci-app-tailscale-community.json
 # 微信推送&全能推送
 sed -i "s|qidian|bilibili|g" package/luci-app-pushbot/root/usr/bin/pushbot/pushbot
 # DNS劫持
@@ -145,6 +144,13 @@ sed -i "s|\'pool\.ntp\.org\'|\'3\.openwrt\.pool\.ntp\.org\'|g" base-files/files/
 # 汉化
 curl -sfL -o ./convert_translation.sh https://github.com/kenzok8/small-package/raw/main/.github/diy/convert_translation.sh
 chmod +x ./convert_translation.sh && bash ./convert_translation.sh
+# oxidns
+mkdir -p luci-app-oxidns/root/usr/bin luci-app-oxidns/root/etc/oxidns /tmp/oxidns
+OXI_VER=$(curl -sfL https://api.github.com/repos/svenshi/oxidns/releases/latest 2>/dev/null | grep 'tag_name' | egrep -o "v[0-9\.]+")
+curl -sfL -o /tmp/oxidns_linux.tar.gz https://github.com/svenshi/oxidns/releases/download/${OXI_VER}/oxidns-aarch64-unknown-linux-musl.tar.gz
+tar -zxf /tmp/oxidns_linux.tar.gz -C /tmp/oxidns && chmod +x /tmp/oxidns/oxidns
+mv /tmp/oxidns/oxidns ./luci-app-oxidns/root/usr/bin && mv /tmp/oxidns/webui ./luci-app-oxidns/usr/share/oxidns
+mv /tmp/oxidns/config.yaml ./luci-app-oxidns/root/etc/oxidns && rm -rf /tmp/oxidns
 # OpenClash
 cd ./luci-app-openclash/root/etc/openclash
 CORE_MATE=https://github.com/vernesong/OpenClash/raw/refs/heads/core/dev/smart/clash-linux-arm64.tar.gz
