@@ -130,6 +130,25 @@ def apply_local_customizations(content):
     result = result.replace('"package/luci-app-tailscale-community"', '"package/luci-app-tailscale"')
     result = result.replace('package/luci-app-tailscale-community/root/', 'package/luci-app-tailscale/root/')
 
+    # 上游 sbwml/luci-app-mosdns (v5) 已用 geo2txt 取代 v2dat:
+    # 仓库顶层不再有 v2dat 目录（导出必然报 "Subdirectory v2dat not found"），
+    # 而 luci-app-mosdns 依赖 geo2txt；若不导出 geo2txt，打包阶段会报
+    # "unable to select packages: geo2txt (no such package)" 导致整个编译失败。
+    v2dat_line = 'svn_export "v5" "v2dat" "package/v2dat" "https://github.com/sbwml/luci-app-mosdns"'
+    geo2txt_line = 'svn_export "v5" "geo2txt" "package/geo2txt" "https://github.com/sbwml/luci-app-mosdns"'
+    if v2dat_line in result:
+        result = result.replace(v2dat_line, geo2txt_line)
+        print("Replaced v2dat -> geo2txt (upstream mosdns renamed the tool)")
+    elif 'geo2txt' not in result and 'sbwml/luci-app-mosdns' in result:
+        # 兜底：上游若已删除该导出行，则在 luci-app-mosdns 导出后补一行
+        lines = result.splitlines()
+        for idx, line in enumerate(lines):
+            if 'svn_export' in line and 'sbwml/luci-app-mosdns' in line and 'luci-app-mosdns"' in line:
+                lines.insert(idx + 1, geo2txt_line)
+                print("Added missing geo2txt export (not present upstream)")
+                break
+        result = '\n'.join(lines)
+
     # 补回本地独有插件：插入到 feeds install 之前（克隆必须早于 install）
     missing = [name for name in ('luci-theme-glass', 'homeproxy', 'OpenWrt-nikki')
                if name not in result]

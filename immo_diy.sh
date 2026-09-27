@@ -93,7 +93,11 @@ svn_export "dev" "luci-app-openclash" "package/luci-app-openclash" "https://gith
 svn_export "main" "luci-app-amlogic" "package/luci-app-amlogic" "https://github.com/ophub/luci-app-amlogic"
 svn_export "v5" "luci-app-mosdns" "package/luci-app-mosdns" "https://github.com/sbwml/luci-app-mosdns"
 svn_export "v5" "mosdns" "package/mosdns" "https://github.com/sbwml/luci-app-mosdns"
-svn_export "v5" "v2dat" "package/v2dat" "https://github.com/sbwml/luci-app-mosdns"
+# 上游 sbwml/luci-app-mosdns (v5) 已用 geo2txt 取代 v2dat:
+# 仓库顶层不再有 v2dat 目录 (继续导出会报 "Subdirectory v2dat not found"),
+# 而 luci-app-mosdns 依赖 geo2txt; 若不导出 geo2txt, 打包阶段会报
+# "unable to select packages: geo2txt (no such package)" 导致整个编译失败.
+svn_export "v5" "geo2txt" "package/geo2txt" "https://github.com/sbwml/luci-app-mosdns"
 svn_export "master" "net/cloudflared" "feeds/packages/net/cloudflared" "https://github.com/openwrt/packages"
 svn_export "main" "easytier" "package/easytier" "https://github.com/EasyTier/luci-app-easytier"
 svn_export "main" "luci-app-easytier" "package/luci-app-easytier" "https://github.com/EasyTier/luci-app-easytier"
