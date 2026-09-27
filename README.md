@@ -4,7 +4,7 @@
 
 ## ✨ 特性
 
-- ✅ 自动每月9号编译 (北京时间 04:00 / 05:00)
+- ✅ 自动每月9号编译 (北京时间 X86 01:00 / N1 05:00，错开避免资源竞争)
 - ✅ 手动触发编译 (`workflow_dispatch`)
 - ✅ N1 和 X86 分开编译，互不干扰
 - ✅ 自动打包 N1 固件 (使用 amlogic 内核)
@@ -25,43 +25,45 @@
 | 默认密码 | `password` |
 | 源码分支 | `master` (基于 OpenWrt 25.12) |
 
-## 📦 已集成 LuCI 插件
+## 📦 Integrated LuCI Plugins
 
-### 基础工具
-- `luci-app-commands` - 命令执行
-- `luci-app-ttyd` - Web终端
-- `luci-app-ramfree` - 内存释放
-- `luci-app-autoreboot` - 定时重启
-- `luci-app-filebrowser` - 文件浏览器
-- `luci-app-netdata` - 系统监控
-- `luci-app-pushbot` - 全能推送
+### Utilities
+- `luci-app-commands`
+- `luci-app-ttyd`
+- `luci-app-ramfree`
+- `luci-app-autoreboot`
+- `luci-app-filebrowser`
+- `luci-app-netdata`
+- `luci-app-pushbot`
 
-### 网络/代理
-- `luci-app-passwall` - 代理工具1
-- `luci-app-passwall2` - 代理工具2
-- `luci-app-openclash` - Clash客户端
-- `luci-app-homeproxy` - HomeProxy代理
-- `luci-app-mosdns` - MosDNS分流
-- `luci-app-adguardhome` - AdGuard Home去广告
-- `luci-app-tailscale` - Tailscale组网
-- `luci-app-ddns` - 动态DNS
+### Network / Proxy
+- `luci-app-passwall`
+- `luci-app-passwall2`
+- `luci-app-openclash`
+- `luci-app-homeproxy`
+- `luci-app-mosdns`
+- `luci-app-adguardhome`
+- `luci-app-tailscale`
+- `luci-app-ddns`
 
-### 下载/文件服务
-- `luci-app-aria2` - Aria2下载
-- `luci-app-qbittorrent` - qBittorrent增强版
-- `luci-app-openlist2` - OpenList文件列表
-- `rclone` - 云存储同步工具
+### Download / File
+- `luci-app-aria2`
+- `luci-app-qbittorrent`
+- `luci-app-openlist2`
+- `rclone`
 
 ### Docker
-- `luci-app-dockerman` - Docker管理
+- `luci-app-dockerman`
 
-### N1 专用
-- `luci-app-amlogic` - 晶晨宝盒固件管理
+### N1 Only (aarch64)
+- `luci-app-amlogic`
+- `luci-app-oxidns`
 
-### 主题
-- `luci-theme-argon` + `luci-app-argon-config` - Argon主题
-- `luci-theme-design` - Design主题
-- `luci-theme-glass` - Glass主题
+### Themes
+- `luci-theme-argon`
+- `luci-app-argon-config`
+- `luci-theme-design`
+- `luci-theme-glass`
 
 ## 🚀 使用方法
 
@@ -84,7 +86,7 @@ git push -u origin main
 
 ### 3. 触发编译
 
-- **自动**：每月9号北京时间 04:00 (N1) / 05:00 (X86) 自动触发
+- **自动**：每月9号北京时间 01:00 (X86) / 05:00 (N1) 自动触发
 - **手动**：进入 Actions 页面 → 选择对应 Workflow → 点击 "Run workflow"
 
 ### 4. 下载固件

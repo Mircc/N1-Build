@@ -18,7 +18,7 @@ on:
         required: false
         default: ''
   schedule:
-    - cron: '0 20 8 * *'   # 每月9号 UTC 20:00 = 北京时间次日04:00
+    - cron: '0 21 8 * *'   # 每月9号北京时间 05:00 (与 X86 01:00 错开，避免资源竞争)
   watch:
     types: [started]
 
@@ -263,6 +263,7 @@ jobs:
         CONFIG_PACKAGE_luci-app-openclash=y
         CONFIG_PACKAGE_luci-app-mosdns=y
         CONFIG_PACKAGE_luci-app-adguardhome=y
+        CONFIG_PACKAGE_luci-app-oxidns=y
         CONFIG_PACKAGE_luci-app-homeproxy=y
         CONFIG_PACKAGE_luci-app-tailscale=y
         CONFIG_PACKAGE_luci-app-filebrowser=y

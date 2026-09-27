@@ -17,7 +17,7 @@ on:
         required: false
         default: ''
   schedule:
-    - cron: '0 21 8 * *'   # 每月9号 UTC 21:00 = 北京时间次日05:00
+    - cron: '0 17 8 * *'   # 每月9号北京时间 01:00 (与 N1 05:00 错开，避免资源竞争)
   watch:
     types: [started]
 

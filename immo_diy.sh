@@ -65,7 +65,6 @@ rm -rf feeds/luci/themes/luci-theme-design
 
 git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon feeds/luci/themes/luci-theme-argon
 git clone --depth 1 https://github.com/LazuliKao/luci-theme-fluent feeds/luci/themes/luci-theme-fluent
-git clone --depth 1 https://github.com/OldCoding/luci-app-kodexplorer package/luci-app-kodexplorer
 #git clone --depth 1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
 git clone --depth 1 https://github.com/zzsj0928/luci-app-pushbot package/luci-app-pushbot
 git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
@@ -84,7 +83,7 @@ git clone --depth 1 https://github.com/sbwml/packages_utils_dockerd feeds/packag
 git clone --depth 1 https://github.com/sbwml/packages_utils_containerd feeds/packages/utils/containerd
 git clone --depth 1 https://github.com/sbwml/packages_utils_runc feeds/packages/utils/runc
 git clone --depth 1 https://github.com/svenshi/luci-app-oxidns package/luci-app-oxidns
-svn_export "master" "luci-app-tailscale-community" "package/luci-app-tailscale-community" "https://github.com/Tokisaki-Galaxy/luci-app-tailscale-community"
+svn_export "master" "luci-app-tailscale-community" "package/luci-app-tailscale" "https://github.com/Tokisaki-Galaxy/luci-app-tailscale-community"
 svn_export "master" "applications/luci-app-cloudflared" "feeds/luci/applications/luci-app-cloudflared" "https://github.com/openwrt/luci"
 svn_export "main" "luci-app-bandix" "package/luci-app-bandix" "https://github.com/timsaya/luci-app-bandix"
 svn_export "main" "openwrt-bandix" "package/openwrt-bandix" "https://github.com/timsaya/openwrt-bandix"
@@ -98,8 +97,6 @@ svn_export "v5" "v2dat" "package/v2dat" "https://github.com/sbwml/luci-app-mosdn
 svn_export "master" "net/cloudflared" "feeds/packages/net/cloudflared" "https://github.com/openwrt/packages"
 svn_export "main" "easytier" "package/easytier" "https://github.com/EasyTier/luci-app-easytier"
 svn_export "main" "luci-app-easytier" "package/luci-app-easytier" "https://github.com/EasyTier/luci-app-easytier"
-svn_export "main" "luci-app-ddns-go" "package/luci-app-ddns-go" "https://github.com/OldCoding/luci-app-ddns-go"
-svn_export "main" "ddns-go" "package/ddns-go" "https://github.com/OldCoding/luci-app-ddns-go"
 
 # aria2补丁
 curl --create-dirs -o feeds/packages/net/aria2/patches/010-increase-max-connections-and-reduce-split-size.patch https://raw.githubusercontent.com/OldCoding/aria2-patch/main/010-increase-max-connections-and-reduce-split-size.patch
@@ -118,11 +115,16 @@ curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.
 
 # 安装插件
 ./scripts/feeds update -i
+rm -rf feeds/luci/applications/luci-app-homeproxy
+git clone --depth 1 https://github.com/immortalwrt/homeproxy package/luci-app-homeproxy
+git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
+git clone --depth 1 https://github.com/OldCoding/luci-theme-glass package/luci-theme-glass
+
 ./scripts/feeds install -a
 
 # 调整菜单位置
 sed -i "s|services|nas|g" package/luci-app-openlist2/root/usr/share/luci/menu.d/luci-app-openlist2.json
-sed -i "s|services|vpn|g" package/luci-app-tailscale-community/root/usr/share/luci/menu.d/luci-app-tailscale-community.json
+sed -i "s|services|vpn|g" package/luci-app-tailscale/root/usr/share/luci/menu.d/luci-app-tailscale-community.json
 # 微信推送&全能推送
 sed -i "s|qidian|bilibili|g" package/luci-app-pushbot/root/usr/bin/pushbot/pushbot
 # DNS劫持
@@ -176,6 +178,12 @@ uci commit network
 # 设置系统主机名
 uci set system.@system[0].hostname='OpenWrt-N1'
 uci commit system
+# 旁路由模式: 关闭 LAN DHCP, 由主路由分配 IP
+uci set dhcp.lan.ignore='1'
+uci commit dhcp
+uci set dhcp.lan.dhcpv6='disabled'
+uci set dhcp.lan.ra='disabled'
+uci commit dhcp
 exit 0
 EOF
 chmod +x files/etc/uci-defaults/99-set-default-ip

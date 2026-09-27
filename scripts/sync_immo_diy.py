@@ -61,6 +61,12 @@ uci commit network
 # 设置系统主机名
 uci set system.@system[0].hostname='OpenWrt-N1'
 uci commit system
+# 旁路由模式: 关闭 LAN DHCP, 由主路由分配 IP
+uci set dhcp.lan.ignore='1'
+uci commit dhcp
+uci set dhcp.lan.dhcpv6='disabled'
+uci set dhcp.lan.ra='disabled'
+uci commit dhcp
 exit 0
 EOF
 chmod +x files/etc/uci-defaults/99-set-default-ip
@@ -81,20 +87,83 @@ cat > files/etc/banner << 'EOF'
 EOF
 '''
 
+# 本地独有的插件（上游没有，但我们的 .config 依赖，必须保留）
+# 缺失会导致 make defconfig 找不到包 / 固件缺少对应插件
+LOCAL_EXTRA_CLONES = """git clone --depth 1 https://github.com/immortalwrt/homeproxy package/luci-app-homeproxy
+git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
+git clone --depth 1 https://github.com/OldCoding/luci-theme-glass package/luci-theme-glass"""
+
+# 需要在 feeds 中移除以避免版本冲突的目录（配合上面的本地克隆）
+LOCAL_EXTRA_RM = """rm -rf feeds/luci/applications/luci-app-homeproxy"""
+
+
+def apply_local_customizations(content):
+    """应用本地定制：
+    1) 移除我们明确不需要的插件（上游仍包含，但用户已要求删除）
+    2) 补回上游没有、但本地 .config 依赖的插件克隆
+    """
+    unwanted = ('kodexplorer', 'ddns-go')
+    kept_lines = []
+    removed_lines = []
+
+    for line in content.splitlines():
+        stripped = line.strip()
+        is_fetch = stripped.startswith('git clone') or stripped.startswith('svn_export')
+        if is_fetch and any(keyword in line for keyword in unwanted):
+            removed_lines.append(stripped)
+            continue
+        kept_lines.append(line)
+
+    if removed_lines:
+        print("Removed unwanted plugins (local customization):")
+        for item in removed_lines:
+            print(f"  - {item}")
+    else:
+        print("No unwanted plugins found to remove")
+
+    result = '\n'.join(kept_lines)
+
+    # 统一 tailscale 目录命名：上游导出为 package/luci-app-tailscale-community，
+    # 但目录名决定编译产物包名，本地 .config 使用 CONFIG_PACKAGE_luci-app-tailscale=y。
+    # 此处改回本地命名，避免同步后 tailscale 配置失配导致插件丢失。
+    # 注意：只改目标目录（第3个参数），不改仓库内子目录名（第2个参数）。
+    result = result.replace('"package/luci-app-tailscale-community"', '"package/luci-app-tailscale"')
+    result = result.replace('package/luci-app-tailscale-community/root/', 'package/luci-app-tailscale/root/')
+
+    # 补回本地独有插件：插入到 feeds install 之前（克隆必须早于 install）
+    missing = [name for name in ('luci-theme-glass', 'homeproxy', 'OpenWrt-nikki')
+               if name not in result]
+    if missing:
+        print(f"Re-adding local-only plugins missing upstream: {', '.join(missing)}")
+        marker = './scripts/feeds install -a'
+        block = LOCAL_EXTRA_RM + '\n' + LOCAL_EXTRA_CLONES
+        if marker in result:
+            result = result.replace(marker, block + '\n\n' + marker, 1)
+        else:
+            result = result.rstrip() + '\n\n' + block + '\n'
+    else:
+        print("All local-only plugins already present")
+
+    return result + '\n'
+
+
 def merge_files(upstream_file):
-    """合并上游文件和本地默认IP配置"""
+    """合并上游文件和本地默认IP配置（含旁路由模式）"""
     # 读取上游文件
     with open(upstream_file, 'r') as f:
         upstream_content = f.read()
     
-    # 检查上游文件是否已有我们的默认IP配置块
-    if '99-set-default-ip' in upstream_content:
-        print("Upstream already has default IP block, using as-is")
+    # 以旁路由配置为标志：缺失则说明上游未带我们的网络配置，需要追加
+    if 'dhcp.lan.ignore' in upstream_content:
+        print("Upstream already has 旁路由 config, using as-is")
         merged_content = upstream_content
     else:
-        # 追加默认IP配置块到文件末尾
+        # 追加默认IP + 旁路由配置块到文件末尾
         merged_content = upstream_content.rstrip() + get_default_ip_block() + '\n'
-        print("Merged: upstream content + default IP block")
+        print("Merged: upstream content + default IP/旁路由 block")
+
+    # 应用本地定制（移除不需要的插件）
+    merged_content = apply_local_customizations(merged_content)
     
     # 写回本地文件
     with open(LOCAL_FILE, 'w') as f:

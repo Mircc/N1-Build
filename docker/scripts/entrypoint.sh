@@ -222,10 +222,11 @@ CONFIG_PACKAGE_qbittorrent-ee=y
 CONFIG_PACKAGE_rclone=y
 PLUGINS_EOF
 
-# ----- N1/aarch64 专用: amlogic 固件管理 -----
+# ----- N1/aarch64 专用: amlogic 固件管理 + oxidns (仅 aarch64) -----
 if [ "${TARGET}" != "x86" ]; then
     cat >> .config <<'AMLOGIC_EOF'
 CONFIG_PACKAGE_luci-app-amlogic=y
+CONFIG_PACKAGE_luci-app-oxidns=y
 AMLOGIC_EOF
 fi
 
