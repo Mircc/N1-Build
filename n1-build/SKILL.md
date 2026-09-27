@@ -261,6 +261,7 @@ permissions: contents: write   # 必须，否则 Release 403
 | 9 | 内核 `6.18.y` 不存在 | 打包仓库无该系列 → 404 | `KernelVersion` 改为 `6.12.y` |
 | 10 | 编译失败无详细日志 | 多线程错误被淹没 | 失败步骤自动 `make -j1 V=s` |
 | 11 | **N1 armsr 编译失败 (out of space)** | build-n1.yml 的 armsr 段缺 `CONFIG_TARGET_ROOTFS_PARTSIZE`，默认 160MB 装不下全部插件，`make_ext4fs` 报 `failed to allocate ... out of space` → `root.ext4` Error 1 | build-n1.yml 与 docker/entrypoint.sh 的 armsr 段补 `CONFIG_TARGET_ROOTFS_PARTSIZE=1024`（X86 段原本已有） |
+| 12 | **nftables 编译失败 → 整个编译中断 (Patch failed)** | `immo_diy.sh` 调用的第三方 turboacc 脚本（`mufeng05/turboacc` 的 `add_turboacc.sh` 第 128 行）会把 **lede 旧版** `100-nftables-add-fullcone-expression-support.patch` 拷进 `package/network/utils/nftables/patches/`；而 ImmortalWrt master 的 nftables 已升级到 **1.1.6**，旧补丁 hunk 全部失配（`statement.h` / `netlink_delinearize.c` / `parser_bison.y` 3of4 / `scanner.l` / `statement.c`）→ `Patch failed` → nftables `.prepared` 失败 → `world` Error 2 | 在 `immo_diy.sh` 执行 `add_turboacc.sh` **之后**加 `rm -f package/network/utils/nftables/patches/100-nftables-add-fullcone-expression-support.patch`。依据：ImmortalWrt **自带** `002-nftables-add-fullcone`（适配 1.1.6，应用成功），fullcone NAT 不依赖被删的补丁；turboacc 其余能力（SFE 加速、内核 netfilter 补丁、libnftnl fullcone）不受影响。**N1 与 X86 共用 immo_diy.sh，两者都会受影响** |
 
 ---
 

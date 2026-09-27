@@ -113,6 +113,14 @@ mv ./package/openwrt-qbee/* ./package/ && rm -rf ./package/openwrt-qbee
 curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 #curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 
+# 移除 turboacc 注入的 lede 旧版 nftables fullcone 补丁:
+# 该补丁针对旧版 nftables 编写, 与 ImmortalWrt master 的 nftables 1.1.6 不兼容,
+# 会导致 hunk 全部失配 -> "Patch failed" -> nftables 编译失败 -> 整个编译中断.
+# fullcone NAT 已由 ImmortalWrt 自带的 002-nftables-add-fullcone 补丁提供,
+# 移除此重复且过时的补丁不影响 fullcone 功能, 仅保留 turboacc 其余能力
+# (SFE 加速 / 内核 netfilter 补丁 / libnftnl fullcone 等).
+rm -f package/network/utils/nftables/patches/100-nftables-add-fullcone-expression-support.patch
+
 # 安装插件
 ./scripts/feeds update -i
 rm -rf feeds/luci/applications/luci-app-homeproxy
