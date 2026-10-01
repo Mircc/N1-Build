@@ -93,10 +93,6 @@ svn_export "dev" "luci-app-openclash" "package/luci-app-openclash" "https://gith
 svn_export "main" "luci-app-amlogic" "package/luci-app-amlogic" "https://github.com/ophub/luci-app-amlogic"
 svn_export "v5" "luci-app-mosdns" "package/luci-app-mosdns" "https://github.com/sbwml/luci-app-mosdns"
 svn_export "v5" "mosdns" "package/mosdns" "https://github.com/sbwml/luci-app-mosdns"
-# 上游 sbwml/luci-app-mosdns (v5) 已用 geo2txt 取代 v2dat:
-# 仓库顶层不再有 v2dat 目录 (继续导出会报 "Subdirectory v2dat not found"),
-# 而 luci-app-mosdns 依赖 geo2txt; 若不导出 geo2txt, 打包阶段会报
-# "unable to select packages: geo2txt (no such package)" 导致整个编译失败.
 svn_export "v5" "geo2txt" "package/geo2txt" "https://github.com/sbwml/luci-app-mosdns"
 svn_export "master" "net/cloudflared" "feeds/packages/net/cloudflared" "https://github.com/openwrt/packages"
 svn_export "main" "easytier" "package/easytier" "https://github.com/EasyTier/luci-app-easytier"
@@ -116,14 +112,6 @@ mv ./package/openwrt-qbee/* ./package/ && rm -rf ./package/openwrt-qbee
 # turboacc 补丁
 curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 #curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
-
-# 移除 turboacc 注入的 lede 旧版 nftables fullcone 补丁:
-# 该补丁针对旧版 nftables 编写, 与 ImmortalWrt master 的 nftables 1.1.6 不兼容,
-# 会导致 hunk 全部失配 -> "Patch failed" -> nftables 编译失败 -> 整个编译中断.
-# fullcone NAT 已由 ImmortalWrt 自带的 002-nftables-add-fullcone 补丁提供,
-# 移除此重复且过时的补丁不影响 fullcone 功能, 仅保留 turboacc 其余能力
-# (SFE 加速 / 内核 netfilter 补丁 / libnftnl fullcone 等).
-rm -f package/network/utils/nftables/patches/100-nftables-add-fullcone-expression-support.patch
 
 # 安装插件
 ./scripts/feeds update -i
