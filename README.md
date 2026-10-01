@@ -11,16 +11,16 @@
 - ✅ X86 直接输出 EFI 镜像
 - ✅ Release 自动生成，包含 IP、密码、更新日志
 - ✅ 自动清理旧 Release (保留最新 10 个)
-- ✅ 旁路由模式（DHCP 已关闭，由主路由分配 IP）
+- ✅ 自适应网络（LAN 通过 DHCP 自动获取 IP，无需固定 IP）
 
 ## 📋 默认信息
 
 | 项目 | 值 |
 |------|-----|
-| 默认 IP | `192.168.50.200` |
-| 子网掩码 | `255.255.255.0` |
-| 网关 | `192.168.50.1` |
-| DNS | `192.168.50.1` |
+| 默认 IP | DHCP 自动获取（由主路由分配） |
+| 主机名 | `OpenWrt-N1` |
+| 网关 / DNS | 由主路由自动下发 |
+| Web 访问 | `http://OpenWrt-N1` |
 | 默认用户 | `root` |
 | 默认密码 | `password` |
 | 源码分支 | `master` (基于 OpenWrt 25.12) |
@@ -97,14 +97,14 @@ git push -u origin main
 
 1. 下载 Releases 中的 `*.img.gz`，解压得到 `.img` 文件
 2. 使用 [晶晨宝盒](https://github.com/ophub/amlogic-s9xxx-openwrt) 或 USB Burning Tool 刷入
-3. 首次启动后访问 `http://192.168.50.200`
+3. 接入网络后自动获取 IP，浏览器访问 `http://OpenWrt-N1`（主机名无法解析时，到主路由后台查看分配的 IP）
 
 ## 💻 X86 使用说明
 
 1. 下载 Releases 中的 `*combined-efi.img.gz`，解压得到 `.img` 文件
 2. 使用 Rufus 或 balenaEtcher 写入 U 盘或 SSD
 3. 从 U 盘/SSD 启动
-4. 访问 `http://192.168.50.200`
+4. 自动获取 IP 后访问 `http://OpenWrt-N1`（或到主路由查看分配的 IP）
 
 ## ⚙️ 自定义
 
@@ -115,8 +115,11 @@ git push -u origin main
 ### 修改默认网络
 
 编辑 `immo_diy.sh` 中的 `files/etc/uci-defaults/99-set-default-ip` 部分。
-当前为**旁路由模式**：DHCP 已关闭（`dhcp.lan.ignore=1`），由主路由负责 IP 分配。
-如需恢复 DHCP，注释掉 `uci set dhcp.lan.ignore='1'` 相关行即可。
+当前为**DHCP 自适应模式**：LAN 作为 DHCP 客户端自动获取 IP（`network.lan.proto='dhcp'`），不再固定 IP；同时本机不在 LAN 口提供 DHCP 服务（`dhcp.lan.ignore=1`），避免与主路由冲突。
+
+> ⚠️ 改这里务必同时改 `scripts/sync_immo_diy.py` 里的同一份模板，否则半月一次的上游同步会把旧配置覆盖回来。
+
+想改回固定 IP：把该块换成 `uci set network.lan.proto='static'` 并补上 ipaddr/netmask/gateway/dns；想让本机给下挂设备分配 IP（作主路由）：把 `dhcp.lan.ignore` 改为 `'0'`。
 
 ### 修改内核版本
 

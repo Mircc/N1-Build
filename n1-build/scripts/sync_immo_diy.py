@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Sync immo_diy.sh from OldCoding/openwrt_packit_arm upstream.
-Preserves local default IP configuration block (192.168.50.200).
+Preserves local default network config (LAN obtains IP via DHCP).
 """
 import os
 import sys
@@ -52,11 +52,13 @@ mkdir -p files/etc/uci-defaults
 
 cat > files/etc/uci-defaults/99-set-default-ip << 'EOF'
 #!/bin/sh
-# 设置默认LAN IP
-uci set network.lan.ipaddr='192.168.50.200'
-uci set network.lan.netmask='255.255.255.0'
-uci set network.lan.gateway='192.168.50.1'
-uci set network.lan.dns='192.168.50.1'
+# LAN 通过 DHCP 自动获取 IP (自适应网络环境)
+# LAN 通过 DHCP 自动获取 IP (自适应网络环境, 不再固定 IP)
+uci set network.lan.proto='dhcp'
+uci -q delete network.lan.ipaddr
+uci -q delete network.lan.netmask
+uci -q delete network.lan.gateway
+uci -q delete network.lan.dns
 uci commit network
 # 设置系统主机名
 uci set system.@system[0].hostname='OpenWrt-N1'
@@ -75,7 +77,8 @@ cat > files/etc/banner << 'EOF'
  |   -   |   | |     | |   |/ _  ||   |   |     |
  |_______|___| |__|__| |___|_____||___|___|__|__|
         ImmortalWrt for N1/X86
-        Default IP: 192.168.50.200
+        DHCP: 自动获取 IP (由主路由分配)
+        Web: http://OpenWrt-N1  (主机名访问)
         User: root  Password: password
 
 EOF

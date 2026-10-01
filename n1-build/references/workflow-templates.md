@@ -7,7 +7,7 @@ Complete GitHub Actions workflow templates for N1-Build.
 ```yaml
 #
 # N1 ImmortalWrt Auto Build
-# Default IP: 192.168.50.200/24 Gateway/DNS: 192.168.50.1
+# LAN DHCP 自动获取 IP  |  Web: http://OpenWrt-N1  |  User: root / password
 #
 name: Build N1 ImmortalWrt
 
@@ -339,10 +339,10 @@ jobs:
           ## 🔧 默认信息
           | 项目 | 值 |
           |------|-----|
-          | 默认 IP | `192.168.50.200` |
+          | 默认 IP | DHCP 自动获取（由主路由分配） |
           | 子网掩码 | `255.255.255.0` |
-          | 网关 | `192.168.50.1` |
-          | DNS | `192.168.50.1` |
+          | Web 访问 | `http://OpenWrt-N1` |
+          | 主机名 | `OpenWrt-N1` |
           | 默认用户 | `root` |
           | 默认密码 | `password` |
           | 源码分支 | `${{ env.REPO_BRANCH }}` |
@@ -355,7 +355,7 @@ jobs:
           ## 📥 使用说明
           1. 下载 `.img.gz` 文件，解压得到 `.img`
           2. 使用 [晶晨宝盒](https://github.com/ophub/amlogic-s9xxx-openwrt) 或 USB Burning Tool 刷入 N1
-          3. 首次启动后访问 `http://192.168.50.200`
+          3. 自动获取 IP 后访问 `http://OpenWrt-N1`（主机名无法解析时到主路由查分配的 IP）
 
           ## ✅ MD5 校验
           下载后请仔细校验MD5，如不正确请重新下载
@@ -407,7 +407,7 @@ jobs:
 ```yaml
 #
 # X86_64 ImmortalWrt Auto Build
-# Default IP: 192.168.50.200/24 Gateway/DNS: 192.168.50.1
+# LAN DHCP 自动获取 IP  |  Web: http://OpenWrt-N1  |  User: root / password
 #
 name: Build X86_64 ImmortalWrt
 
@@ -738,10 +738,10 @@ jobs:
           ## 🔧 默认信息
           | 项目 | 值 |
           |------|-----|
-          | 默认 IP | `192.168.50.200` |
+          | 默认 IP | DHCP 自动获取（由主路由分配） |
           | 子网掩码 | `255.255.255.0` |
-          | 网关 | `192.168.50.1` |
-          | DNS | `192.168.50.1` |
+          | Web 访问 | `http://OpenWrt-N1` |
+          | 主机名 | `OpenWrt-N1` |
           | 默认用户 | `root` |
           | 默认密码 | `password` |
           | 源码分支 | `${{ env.REPO_BRANCH }}` |
@@ -753,7 +753,7 @@ jobs:
           ## 📥 使用说明
           1. 下载 `*combined-efi.img.gz`，解压得到 `.img`
           2. 用工具（如 Rufus、balenaEtcher）写入 U 盘或 SSD
-          3. 从 U 盘/SSD 启动，首次启动后访问 `http://192.168.50.200`
+          3. 从 U 盘/SSD 启动，自动获取 IP 后访问 `http://OpenWrt-N1`
           4. 建议在 LuCI 里设置好自己的网络后再投入生产使用
 
           ## ✅ MD5 校验

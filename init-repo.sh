@@ -27,7 +27,7 @@ git commit -m "Initial commit: N1 & X86 ImmortalWrt auto build
 
 - N1 (s905d) build workflow
 - X86_64 build workflow  
-- Default IP: 192.168.50.200
+- DHCP: 自动获取 IP  |  Web: http://OpenWrt-N1
 - Plugins from openwrt_immortalwrt_mini.yml"
 
 echo ""

@@ -1,6 +1,6 @@
 ---
 name: n1-build
-description: 基于 ImmortalWrt 源码，用 GitHub Actions 自动编译 N1 (s905d) 与 X86_64 固件的完整工作流。涵盖插件管理、旁路由模式、N1 amlogic 打包、Docker 本地编译、安全 CVE 信息注入、已知坑与修复。默认 IP 192.168.50.200，内核 6.12.y。
+description: 基于 ImmortalWrt 源码，用 GitHub Actions 自动编译 N1 (s905d) 与 X86_64 固件的完整工作流。涵盖插件管理、旁路由模式、N1 amlogic 打包、Docker 本地编译、安全 CVE 信息注入、已知坑与修复。LAN 通过 DHCP 自动获取 IP，内核 6.12.y。
 agent_created: true
 version: v2.0_20260726
 compatible_platforms:
@@ -22,8 +22,8 @@ compatible_platforms:
 |----|----|
 | 源码 | `immortalwrt/immortalwrt` 分支 `master`（≈ OpenWrt 25.12 系列） |
 | N1 打包 Action | `OldCoding/amlogic-s9xxx-openwrt@main`（**不是** 旧的 `ophub/flippy-openwrt-actions`） |
-| 默认 IP | `192.168.50.200/24` |
-| 网关 / DNS | `192.168.50.1` |
+| 默认 IP | DHCP 自动获取（`network.lan.proto='dhcp'`） |
+| 主机名 / Web | `OpenWrt-N1` → `http://OpenWrt-N1` |
 | 用户名 / 密码 | `root` / `password` |
 | 内核版本 | `6.12.y`（`KernelVersion` 文件，N1 打包时解析为最新 6.12.x） |
 | 网络模式 | **旁路由**（LAN DHCP 关闭，主路由分配 IP） |
@@ -121,7 +121,7 @@ N1-Build/
 4. 修正目录结构（`mv ./package/xxx/* ./package/ && rm -rf ./package/xxx` 处理扁平化仓库）
 5. aria2 补丁、turboacc 补丁（`chenmozhijin/turboacc`）
 6. `./scripts/feeds update -i && ./scripts/feeds install -a`
-7. 写入 `files/etc/uci-defaults/99-set-default-ip`（默认 IP + **旁路由**）
+7. 写入 `files/etc/uci-defaults/99-set-default-ip`（LAN DHCP 自动获取 + 不提供 DHCP 服务）
 8. 写入 `files/etc/banner`
 9. 个性化 sed：`menu.d` 菜单位置、pushbot 渠道、NTP 服务器、amlogic 品牌名、OpenClash 核心/Geo 数据库下载
 
