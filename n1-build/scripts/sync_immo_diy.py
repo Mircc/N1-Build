@@ -112,6 +112,43 @@ TURBOACC_PATCH_RM = "rm -f package/network/utils/nftables/patches/100-nftables-a
 # 需要在 feeds 中移除以避免版本冲突的目录（配合上面的本地克隆）
 LOCAL_EXTRA_RM = """rm -rf feeds/luci/applications/luci-app-homeproxy"""
 
+# 安全加固块的 golden source 与边界标记。
+# 加固块内联在 immo_diy.sh 末尾，而 immo_diy.sh 每次半月同步会被上游整体覆盖，
+# 一旦缺失管理面就会静默退回 HTTP 明文 + SSH 密码登录（最难察觉的一类故障）。
+# 因此这里与 TURBOACC_PATCH_RM / AMLOGIC_SED_BLOCK 同样处理：
+# 缺失则追加，存在则按 golden source 刷新，保证修复永远跟着同步一起分发。
+SECURITY_GOLDEN = "security/immo_diy-security.sh"
+SECURITY_START = "# ============ SECURITY_HARDENING_BLOCK_START ============"
+SECURITY_END = "# ============ SECURITY_HARDENING_BLOCK_END ============"
+
+
+def ensure_security_block(content):
+    """幂等地确保安全加固块存在且与 golden source 一致。
+
+    - 上游同步抹掉了整段 -> 从 golden source 追加回文件末尾
+    - 已存在           -> 按 golden source 刷新标记之间的内容（修复/更新随同步自动生效）
+    - golden 缺失      -> 只告警不阻断（避免同步任务因缺文件而整体失败）
+    """
+    try:
+        with open(SECURITY_GOLDEN, 'r') as f:
+            golden = f.read().rstrip('\n')
+    except IOError:
+        print(f"WARNING: golden source {SECURITY_GOLDEN} not found, security block skipped")
+        return content
+
+    if SECURITY_START in content and SECURITY_END in content:
+        head, rest = content.split(SECURITY_START, 1)
+        _old_block, tail = rest.split(SECURITY_END, 1)
+        new_content = head + SECURITY_START + '\n' + golden + '\n' + SECURITY_END + tail
+        if new_content == content:
+            print("Security hardening block already up to date")
+        else:
+            print("Security hardening block refreshed from golden source")
+        return new_content
+
+    print("Re-added security hardening block (was missing/wiped by upstream sync)")
+    return content.rstrip('\n') + '\n\n' + SECURITY_START + '\n' + golden + '\n' + SECURITY_END + '\n'
+
 
 def apply_local_customizations(content):
     """应用本地定制：
@@ -241,6 +278,9 @@ def apply_local_customizations(content):
             result = result.rstrip() + '\n\n' + block + '\n'
     else:
         print("All local-only plugins already present")
+
+    # 安全加固块必须与上面的定制一起在同步后存活（缺失 = 管理面退回明文 HTTP）
+    result = ensure_security_block(result)
 
     return result + '\n'
 

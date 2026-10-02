@@ -3,5 +3,22 @@ cache/
 output/*
 !output/.gitkeep
 
+# Python 编译产物
+__pycache__/
+*.py[cod]
+
 # macOS
 .DS_Store
+
+# ===== 私钥 / 敏感凭证 —— 绝不允许进入公开仓库 =====
+# 安全加固包 openwrt-security-hardening 的 private-keys/ 含 SSH 私钥，
+# 一旦推送到 GitHub public repo 即视为永久泄露（重写历史也无法保证不被克隆过）。
+# 固件内所需的 CA 私钥已固化在 security/immo_diy-security.sh 中另行管理。
+private-keys/
+**/private-keys/
+*.key
+*.pem
+*_rsa
+*_dsa
+id_ed25519
+id_ecdsa

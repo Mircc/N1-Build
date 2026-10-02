@@ -196,6 +196,16 @@ jobs:
         CONFIG_PACKAGE_luci-theme-glass=y
         EOF
 
+        # HTTPS/TLS 安全加固支持 (配合 immo_diy.sh 内置的安全加固块):
+        # luci-ssl 取代 luci，提供 HTTPS 管理面；openssl-util 供 uhttpd-cert-sync
+        # 在 LAN IP 变化时用内置 CA 重新签发服务器证书
+        cat >> .config <<EOF
+        CONFIG_PACKAGE_luci-ssl=y
+        CONFIG_PACKAGE_uhttpd-mod-tls=y
+        CONFIG_PACKAGE_libustream-openssl=y
+        CONFIG_PACKAGE_openssl-util=y
+        EOF
+
         # 必备软件包:
         cat >> .config <<EOF
         CONFIG_PACKAGE_php8=y

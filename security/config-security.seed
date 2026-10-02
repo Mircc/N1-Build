@@ -1,0 +1,33 @@
+# ==============================================================================
+#  安全加固所需的 .config 片段
+#  追加到 build-n1.yml / build-x86.yml 生成 .config 的位置
+# ==============================================================================
+
+# ---- 必需: uhttpd 的 TLS 支持，没有它 443 起不来，加固脚本会自动降级 ----
+CONFIG_PACKAGE_luci-ssl=y
+CONFIG_PACKAGE_uhttpd-mod-tls=y
+CONFIG_PACKAGE_libustream-openssl=y
+
+# ---- 必需: 证书自动重签依赖（IP 变化时用内置 CA 重新签发）----
+CONFIG_PACKAGE_openssl-util=y
+
+# ---- 可选: mDNS，让 http://OpenWrt-N1.local 可用（配合证书里的 DNS SAN，
+#      这样即使 IP 变了，用主机名访问也不会报证书错误）----
+# CONFIG_PACKAGE_umdns=y
+
+# ---- 强烈建议: 去掉不需要的监听面 ----
+# 不用 SMB 就把这两项关掉（当前 N1 上 445 开放且 Guest 会话可建立）
+# CONFIG_PACKAGE_samba4-server=n
+# CONFIG_PACKAGE_luci-app-samba4=n
+
+# ---- 可选: Caddy 反代补安全响应头（uhttpd 不支持自定义响应头）----
+# 启用后需同时把 uhttpd 改监听 127.0.0.1:8080，见 optional-caddy/ 目录
+# CONFIG_PACKAGE_caddy=y
+
+# ---- 可选: 登录失败自动封禁（比防火墙限速更彻底）----
+# CONFIG_PACKAGE_fail2ban=y
+# CONFIG_PACKAGE_luci-app-fail2ban  # 该包不一定在所有源里存在，需自行确认
+
+# ---- 保持关闭: 不要开启 rpcd 的 HTTP JSON-RPC 端点 ----
+# 当前 /ubus 返回 404 是正确状态（可屏蔽 CVE-2021-20090 类未授权 RCE）
+# 切勿设置 uhttpd.main.ubus_prefix 或安装 uhttpd-mod-ubus
