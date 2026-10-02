@@ -264,6 +264,7 @@ permissions: contents: write   # 必须，否则 Release 403
 | 12 | **nftables 编译失败 → 整个编译中断 (Patch failed)** | `immo_diy.sh` 调用的第三方 turboacc 脚本（`mufeng05/turboacc` 的 `add_turboacc.sh` 第 128 行）会把 **lede 旧版** `100-nftables-add-fullcone-expression-support.patch` 拷进 `package/network/utils/nftables/patches/`；而 ImmortalWrt master 的 nftables 已升级到 **1.1.6**，旧补丁 hunk 全部失配（`statement.h` / `netlink_delinearize.c` / `parser_bison.y` 3of4 / `scanner.l` / `statement.c`）→ `Patch failed` → nftables `.prepared` 失败 → `world` Error 2 | 在 `immo_diy.sh` 执行 `add_turboacc.sh` **之后**加 `rm -f package/network/utils/nftables/patches/100-nftables-add-fullcone-expression-support.patch`。依据：ImmortalWrt **自带** `002-nftables-add-fullcone`（适配 1.1.6，应用成功），fullcone NAT 不依赖被删的补丁；turboacc 其余能力（SFE 加速、内核 netfilter 补丁、libnftnl fullcone）不受影响。**N1 与 X86 共用 immo_diy.sh，两者都会受影响** |
 | 13 | **打包阶段失败 `ERROR: unable to select packages: geo2txt`** | 上游 `sbwml/luci-app-mosdns`(v5) 已用 **geo2txt 取代 v2dat**：仓库顶层不再有 `v2dat` 目录（继续导出会报 `Subdirectory v2dat not found`），而 `luci-app-mosdns` **依赖 `geo2txt`**；我们仍在导出已不存在的 `v2dat`，导致 `geo2txt` 包从未被编译 → APK 阶段 `unable to select packages: geo2txt (no such package)`，`required by: luci-app-mosdns-1.7.14-r1[geo2txt]` → `package/Makefile:164: package/install` Error 3 → 编译失败。**注意：此失败发生在编译已完成之后的 rootfs 打包阶段（不是编译阶段），N1 与 X86 均相同** | `immo_diy.sh`：把 `svn_export "v5" "v2dat" "package/v2dat" "https://github.com/sbwml/luci-app-mosdns"` 改为 `svn_export "v5" "geo2txt" "package/geo2txt" "https://github.com/sbwml/luci-app-mosdns"`。`sync_immo_diy.py`：同步时加保护（v2dat→geo2txt 替换 + 若上游删行则兜底补一行），避免半月同步把 `v2dat` 带回来 |
 | 14 | **⚠️ 本地定制被自动同步抹掉（元坑，最高频复发原因）** | `sync-upstream.yml` 每月 1/15 号自动运行 `scripts/sync_immo_diy.py`，它会 **下载上游 `immo_diy.sh` 整体重建本地文件**。任何只写在 `immo_diy.sh` 里、但在 `sync_immo_diy.py` 的 `apply_local_customizations()` 中**没有对应防护**的本地定制，都会在下次同步时被静默抹掉 → 表现为"上次明明修好了，这次编译又失败"。**实证两例**：① `#12` 的 turboacc `rm -f` 补丁删除行，9-27 修复 → 9-30 编译成功 → 10-01 自动同步抹掉 → 10-02 编译又失败于同一处；② amlogic 在线更新指向 `Mircc/N1-Build` 曾被同步打回第三方仓库 OldCoding | **铁律：改 `immo_diy.sh` 任何一行本地定制的同时，必须在 `scripts/sync_immo_diy.py` 的 `apply_local_customizations()` 加幂等防护，并同步更新 `n1-build/scripts/sync_immo_diy.py` 副本**。已有防护清单见 §7.1；验证方法见 §7.2 |
+| 15 | **安全加固整合两坑：① 证书路径不一致导致 HTTPS 静默失效 ② marker 区与 golden 不等价导致每次同步产生无意义 diff** | ① 加固脚本把证书写进 `files/etc/uhttpd/uhttpd.crt`，但 uci-defaults 检查并指向 `/etc/uhttpd.crt`，路径不一致 → 前置检查失败 → **静默跳过整个 HTTPS 加固**，管理面退回**明文 HTTP**（无任何报错，最难察觉的一类） ② 说明性注释若放在 START marker 之**后**，marker 之间内容就 ≠ golden source `security/immo_diy-security.sh`，同步刷新会把它覆盖掉，既产生无意义 diff 又会丢手工改动 | ① 统一为 `/etc/uhttpd/uhttpd.crt|key`（与文件实际写入位置一致） ② 说明注释一律放 START marker **之前**，marker 之间严格等于 golden；由 `sync_immo_diy.py` 的 `ensure_security_block()` 幂等维护（缺失从 golden 补回、存在按 golden 刷新） |
 
 ---
 
@@ -276,6 +277,7 @@ permissions: contents: write   # 必须，否则 Release 403
 | amlogic 在线更新 → `Mircc/N1-Build` | `AMLOGIC_SED_BLOCK` 替换含 `breakingbadboy`/`openwrt_packit_arm` 的旧 sed 行 | ✅ 已有（#14 修复） |
 | mosdns `geo2txt`（替代 `v2dat`） | v2dat→geo2txt 替换 + 兜底补行 | ✅ 已有（#13） |
 | tailscale 目录名 `package/luci-app-tailscale` | 上游 `luci-app-tailscale-community` 目录名回改（目录名决定包名） | ✅ 已有 |
+| 安全加固块（`SECURITY_HARDENING_BLOCK_*` 内联在 immo_diy.sh 末尾） | `ensure_security_block()` 按 golden `security/immo_diy-security.sh` 幂等补回/刷新 | ✅ 已有（#15） |
 | 移除 kodexplorer / ddns-go | `unwanted` 过滤 `git clone`/`svn_export` 拉取行 | ✅ 已有 |
 | 补回 glass / homeproxy / nikki | `LOCAL_EXTRA_CLONES` 插到 `./scripts/feeds install -a` 之前 | ✅ 已有 |
 
@@ -312,8 +314,10 @@ bash -n immo_diy.sh        # 语法必须 OK
 
 ### 8.4 切换编译周期
 编辑 workflow 的 `schedule.cron`：
-- 每月 9 号 N1：`'0 20 8 * *'`（北京 04:00）
-- 每月 9 号 X86：`'0 21 8 * *'`（北京 05:00）
+- 每月 9 号 X86：`'0 17 8 * *'`（北京 01:00）
+- 每月 9 号 N1：`'0 21 8 * *'`（北京 05:00）
+
+两者刻意错开 4 小时以避免 GitHub Actions 资源竞争。注意 cron 用 **UTC**，北京时间需减 8 小时。
 
 ### 8.5 提交到 GitHub 并触发
 ```bash
@@ -349,3 +353,4 @@ gh workflow run build-x86.yml --repo <owner>/N1-Build
 3. 任何涉及 `immo_diy.sh` 的改动都要考虑 `sync-upstream.yml` 每半月会覆盖它——保留块用 `99-set-default-ip` 标记。
 4. N1 与 X86 的 `.config` / entrypoint 配置**分开维护**，改一处要同步另一处。
 5. 编译失败先看 Actions 日志里的 `make -j1 V=s` 输出，优先怀疑：依赖缺失（APK 严格）、插件源码 URL 失效、磁盘空间。
+6. **私钥红线**：`private-keys/`、SSH 私钥、`*.key`/`*.pem` **绝不进公开仓库**，`.gitignore` 已加固拦截。已知例外与残余风险：为支持 `uhttpd-cert-sync` 在 LAN IP（DHCP 自适应）变化时用内置 CA 重签服务器证书，**CA 私钥固化在 `security/immo_diy-security.sh` 里**，进公开仓库等同公开该 CA。可接受的前提是它只用于本机自签 HTTPS 管理面；若安全要求更高，应改为**首次启动现场生成**。
