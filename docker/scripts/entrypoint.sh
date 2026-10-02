@@ -118,7 +118,6 @@ CONFIG_PACKAGE_luci-theme-glass=y
 
 # HTTPS/TLS 安全加固支持 (配合 immo_diy.sh 内置的安全加固块)
 CONFIG_PACKAGE_luci-ssl=y
-CONFIG_PACKAGE_uhttpd-mod-tls=y
 CONFIG_PACKAGE_libustream-openssl=y
 CONFIG_PACKAGE_openssl-util=y
 

@@ -5,10 +5,20 @@
 #           登录无速率限制 / DNS 全网信任点无防护 / DHCP 换 IP 导致证书失效
 #
 # .config 需要: CONFIG_PACKAGE_luci-ssl=y
-#               CONFIG_PACKAGE_uhttpd-mod-tls=y
 #               CONFIG_PACKAGE_libustream-openssl=y
 #               CONFIG_PACKAGE_openssl-util=y      # 证书自动重签依赖
+#
+# 注意: 新版 ImmortalWrt 已移除 uhttpd-mod-tls 包, TLS 直接编译进 uhttpd 本体,
+#       所以不要再写 CONFIG_PACKAGE_uhttpd-mod-tls=y —— 它会被 make defconfig
+#       静默丢弃(无害但误导), HTTPS 能力由上述三个包保证。
+#
+# 路径前提: 本块必须运行在 OpenWrt 源码根目录 —— files/ 才会被打进固件的 /etc。
+#           如果上层脚本此前 cd 进了子目录(见 SKILL.md 已知坑 #16), 后果是这些
+#           加固文件会落到某个包的 root/ 子目录里, 编译不报错但永不生效。
 # ==========================================================================
+[ -n "$OPENWRT_ROOT" ] || OPENWRT_ROOT="$(pwd)"
+cd "$OPENWRT_ROOT" || exit 1
+
 mkdir -p files/etc/uci-defaults files/etc/dropbear files/etc/uhttpd files/usr/sbin
 
 # ---- 1+2. 证书资产 —— 编译期不再固化任何私钥 -------------------------

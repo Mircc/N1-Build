@@ -121,6 +121,71 @@ SECURITY_GOLDEN = "security/immo_diy-security.sh"
 SECURITY_START = "# ============ SECURITY_HARDENING_BLOCK_START ============"
 SECURITY_END = "# ============ SECURITY_HARDENING_BLOCK_END ============"
 
+# 「回到源码根目录」保护（已知坑 #16）：
+# 上游脚本 `cd package` 后一路钻进 luci-app-openclash/root/etc/openclash/core
+# 且从不返回；此后所有 files/ 写入若用相对路径，都会落进那个子目录，
+# 最终被打成固件的 /etc/openclash/core/files/etc/... —— 编译不报错、却不执行。
+# 后果是 DHCP 自适应、主机名、全部安全加固统统静默失效。
+OPENWRT_ROOT_DEF = 'OPENWRT_ROOT="$(pwd)"'
+OPENCLASH_CORE_MARKER = 'curl -sfL -o ./meta.tar.gz "$CORE_MATE"'
+
+
+def ensure_root_cd(content):
+    """幂等地确保：源码根路径被记录，且 openclash 段结束后回到根目录。
+
+    - 缺任一者 -> 补回（被上游同步抹掉时自动恢复）
+    - 都已存在 -> 原样返回（不重复叠加）
+    """
+    lines = content.splitlines()
+    changed = False
+
+    # 1) 顶部记录源码根绝对路径
+    if OPENWRT_ROOT_DEF not in content:
+        insert_at = 0
+        for idx, line in enumerate(lines):
+            if line.startswith('#!'):
+                insert_at = idx + 1
+                break
+        lines[insert_at:insert_at] = [
+            '',
+            '# 记录 OpenWrt 源码根目录(绝对路径)',
+            '# 下方 `cd package` 之后会一路 cd 进 luci-app-openclash 的子目录且不再返回,',
+            '# 之后所有 files/ 相关写入若用相对路径就会落到',
+            '#   package/luci-app-openclash/root/etc/openclash/core/files/...',
+            '# 而不会被打进固件的 /etc (见 SKILL.md 已知坑 #16)。',
+            '# 因此在深入子目录后用 cd "$OPENWRT_ROOT" 回到源码根。',
+            OPENWRT_ROOT_DEF,
+        ]
+        content = '\n'.join(lines)
+        lines = content.splitlines()
+        changed = True
+
+    # 2) openclash core 处理完毕后必须回到源码根
+    cd_back = 'cd "$OPENWRT_ROOT" || exit 1'
+    if OPENCLASH_CORE_MARKER in content and cd_back not in content:
+        lines = content.splitlines()
+        for idx, line in enumerate(lines):
+            if OPENCLASH_CORE_MARKER in line:
+                insert_at = idx + 1
+                # 跨过 core 段收尾行（tar 解压 / chmod / rm）
+                while insert_at < len(lines) and lines[insert_at].strip().startswith(('chmod', 'rm ')):
+                    insert_at += 1
+                lines[insert_at:insert_at] = [
+                    '',
+                    '# 回到源码根目录, 否则下方 files/ 会被写进 openclash 的 core 目录而不是固件的 /etc',
+                    cd_back,
+                    'echo "[immo_diy] 已回到源码根目录: $(pwd)"',
+                ]
+                content = '\n'.join(lines)
+                changed = True
+                break
+
+    if changed:
+        print("Re-added 'cd to source root' guard (without it files/ lands inside a package dir)")
+    else:
+        print("'cd to source root' guard already present")
+    return content
+
 
 def ensure_security_block(content):
     """幂等地确保安全加固块存在且与 golden source 一致。
@@ -278,6 +343,9 @@ def apply_local_customizations(content):
             result = result.rstrip() + '\n\n' + block + '\n'
     else:
         print("All local-only plugins already present")
+
+    # 先确保「回到源码根」，否则下面补的 files/ 内容会落进 package 子目录
+    result = ensure_root_cd(result)
 
     # 安全加固块必须与上面的定制一起在同步后存活（缺失 = 管理面退回明文 HTTP）
     result = ensure_security_block(result)

@@ -190,7 +190,6 @@ jobs:
         # 在 LAN IP 变化时用内置 CA 重新签发服务器证书
         cat >> .config <<EOF
         CONFIG_PACKAGE_luci-ssl=y
-        CONFIG_PACKAGE_uhttpd-mod-tls=y
         CONFIG_PACKAGE_libustream-openssl=y
         CONFIG_PACKAGE_openssl-util=y
         EOF

@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# 记录 OpenWrt 源码根目录(绝对路径)
+# 下方 `cd package` 之后会一路 cd 进 luci-app-openclash 的子目录且不再返回,
+# 之后所有 files/ 相关写入若用相对路径就会落到
+#   package/luci-app-openclash/root/etc/openclash/core/files/...
+# 而不会被打进固件的 /etc (见 SKILL.md 已知坑 #16)。
+# 因此在深入子目录后用 cd "$OPENWRT_ROOT" 回到源码根。
+OPENWRT_ROOT="$(pwd)"
+
 # 定义全局临时缓存根目录
 DL_CACHE="/tmp/openwrt_pkg_cache"
 [ -d "$DL_CACHE" ] || mkdir -p "$DL_CACHE"
@@ -171,6 +179,10 @@ mkdir ./core && cd ./core
 curl -sfL -o ./meta.tar.gz "$CORE_MATE" && tar -zxf ./meta.tar.gz && mv ./clash ./clash_meta
 chmod +x ./clash* ; rm -rf ./*.gz
 
+# 回到源码根目录, 否则下方 files/ 会被写进 openclash 的 core 目录而不是固件的 /etc
+cd "$OPENWRT_ROOT" || exit 1
+echo "[immo_diy] 已回到源码根目录: $(pwd)"
+
 # ===== 设置默认网络配置 (请勿删除) =====
 echo "===== 设置默认网络配置 ====="
 mkdir -p files/etc/uci-defaults
@@ -227,10 +239,20 @@ EOF
 #           登录无速率限制 / DNS 全网信任点无防护 / DHCP 换 IP 导致证书失效
 #
 # .config 需要: CONFIG_PACKAGE_luci-ssl=y
-#               CONFIG_PACKAGE_uhttpd-mod-tls=y
 #               CONFIG_PACKAGE_libustream-openssl=y
 #               CONFIG_PACKAGE_openssl-util=y      # 证书自动重签依赖
+#
+# 注意: 新版 ImmortalWrt 已移除 uhttpd-mod-tls 包, TLS 直接编译进 uhttpd 本体,
+#       所以不要再写 CONFIG_PACKAGE_uhttpd-mod-tls=y —— 它会被 make defconfig
+#       静默丢弃(无害但误导), HTTPS 能力由上述三个包保证。
+#
+# 路径前提: 本块必须运行在 OpenWrt 源码根目录 —— files/ 才会被打进固件的 /etc。
+#           如果上层脚本此前 cd 进了子目录(见 SKILL.md 已知坑 #16), 后果是这些
+#           加固文件会落到某个包的 root/ 子目录里, 编译不报错但永不生效。
 # ==========================================================================
+[ -n "$OPENWRT_ROOT" ] || OPENWRT_ROOT="$(pwd)"
+cd "$OPENWRT_ROOT" || exit 1
+
 mkdir -p files/etc/uci-defaults files/etc/dropbear files/etc/uhttpd files/usr/sbin
 
 # ---- 1+2. 证书资产 —— 编译期不再固化任何私钥 -------------------------
