@@ -96,6 +96,19 @@ LOCAL_EXTRA_CLONES = """git clone --depth 1 https://github.com/immortalwrt/homep
 git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki package/OpenWrt-nikki
 git clone --depth 1 https://github.com/OldCoding/luci-theme-glass package/luci-theme-glass"""
 
+# 晶晨宝盒(luci-app-amlogic) 在线更新必须指向本人仓库 Mircc/N1-Build。
+# 上游默认把更新地址指向第三方仓库 OldCoding/openwrt_packit_arm，
+# 若不同步覆盖，用户点"在线更新"会拉到别人发布的固件。
+# 后缀保持 .img.gz；内核本仓库不发布，仍用 ophub/kernel（该 option 未列出，不受影响）。
+AMLOGIC_SED_BLOCK = r"""sed -i "\|amlogic_firmware_repo|s|'.*'|'https://github.com/Mircc/N1-Build'|" package/luci-app-amlogic/root/etc/config/amlogic
+sed -i "\|amlogic_firmware_tag|s|'.*'|'N1-ImmortalWrt'|" package/luci-app-amlogic/root/etc/config/amlogic
+sed -i "s|breakingbadboy/OpenWrt|Mircc/N1-Build|g" package/luci-app-amlogic/luasrc/model/cbi/amlogic/amlogic_config.lua"""
+
+# turboacc 注入的 lede 旧版 nftables fullcone 补丁，必须与 ImmortalWrt master 的
+# nftables 1.1.6 隔离（hunk 全部失配 -> "Patch failed" -> nftables 编译失败 -> 整个编译中断）。
+# fullcone 已由 ImmortalWrt 自带 002-nftables-add-fullcone 补丁提供，删除无副作用。
+TURBOACC_PATCH_RM = "rm -f package/network/utils/nftables/patches/100-nftables-add-fullcone-expression-support.patch"
+
 # 需要在 feeds 中移除以避免版本冲突的目录（配合上面的本地克隆）
 LOCAL_EXTRA_RM = """rm -rf feeds/luci/applications/luci-app-homeproxy"""
 
@@ -151,6 +164,69 @@ def apply_local_customizations(content):
                 print("Added missing geo2txt export (not present upstream)")
                 break
         result = '\n'.join(lines)
+
+    # 补回 turboacc 的 nftables 补丁清理命令:
+    # add_turboacc.sh 执行时会把 lede 针对旧版 nftables 写的 fullcone 补丁拷进源码树,
+    # 该补丁与 ImmortalWrt master 的 nftables 1.1.6 不兼容 -> hunk 全部失配 ->
+    # "Patch failed" -> nftables 编译失败 -> 整个编译中断 (N1 与 X86 均受影响)。
+    # 该命令必须在 bash add_turboacc.sh 之后执行，且需在上游同步后存活。
+    if TURBOACC_PATCH_RM not in result and 'add_turboacc.sh' in result:
+        lines = result.splitlines()
+        for idx, line in enumerate(lines):
+            if 'bash add_turboacc.sh' in line and not line.strip().startswith('#'):
+                insert_at = idx + 1
+                # 跳过紧随的注释行（如被注释的备选 URL），插到它们之后
+                while insert_at < len(lines) and lines[insert_at].strip().startswith('#'):
+                    insert_at += 1
+                block = [
+                    '',
+                    '# 移除 turboacc 注入的 lede 旧版 nftables fullcone 补丁:',
+                    '# 该补丁针对旧版 nftables, 与 ImmortalWrt master 的 nftables 1.1.6 不兼容,',
+                    '# 会导致 hunk 全部失配 -> "Patch failed" -> nftables 编译失败 -> 整个编译中断.',
+                    '# fullcone NAT 已由 ImmortalWrt 自带的 002-nftables-add-fullcone 补丁提供,',
+                    '# 移除此重复且过时的补丁不影响 fullcone 功能, 仅保留 turboacc 其余能力.',
+                    TURBOACC_PATCH_RM,
+                ]
+                lines[insert_at:insert_at] = block
+                print("Re-added turboacc nftables patch cleanup (must survive sync)")
+                break
+        result = '\n'.join(lines)
+    elif TURBOACC_PATCH_RM in result:
+        print("turboacc nftables patch cleanup already present")
+    else:
+        print("WARNING: add_turboacc.sh not found upstream, skipped patch cleanup")
+
+    # 晶晨宝盒(luci-app-amlogic) 在线更新地址必须指向本人仓库。
+    # 上游默认用 6 行 sed 把地址指向第三方仓库 OldCoding/openwrt_packit_arm，
+    # 同步若不覆盖，用户点"在线更新"会拉到别人发布的固件。
+    old_amlogic_markers = ('breakingbadboy', 'openwrt_packit_arm')
+    if 'Mircc/N1-Build' not in result and 'package/luci-app-amlogic' in result:
+        lines = result.splitlines()
+        new_lines = []
+        insert_at = None
+        replaced = 0
+        for line in lines:
+            stripped = line.strip()
+            is_old_amlogic_sed = (
+                stripped.startswith('sed -i')
+                and ('amlogic_config.lua' in line
+                     or 'package/luci-app-amlogic/root/etc/config/amlogic' in line)
+                and any(marker in line for marker in old_amlogic_markers)
+            )
+            if is_old_amlogic_sed:
+                if insert_at is None:
+                    insert_at = len(new_lines)
+                replaced += 1
+                continue
+            new_lines.append(line)
+        if replaced:
+            new_lines[insert_at:insert_at] = AMLOGIC_SED_BLOCK.splitlines()
+            result = '\n'.join(new_lines)
+            print(f"Redirected luci-app-amlogic to Mircc/N1-Build (replaced {replaced} upstream sed lines)")
+        else:
+            print("WARNING: upstream amlogic sed lines not recognized, redirection skipped")
+    elif 'Mircc/N1-Build' in result:
+        print("luci-app-amlogic already points to Mircc/N1-Build")
 
     # 补回本地独有插件：插入到 feeds install 之前（克隆必须早于 install）
     missing = [name for name in ('luci-theme-glass', 'homeproxy', 'OpenWrt-nikki')
