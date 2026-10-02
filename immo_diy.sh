@@ -233,113 +233,69 @@ EOF
 # ==========================================================================
 mkdir -p files/etc/uci-defaults files/etc/dropbear files/etc/uhttpd files/usr/sbin
 
-# ---- 1. 内置私有 CA（用于 DHCP 换 IP 后重新签发服务器证书）---------------
-cat > files/etc/uhttpd/ca.crt <<'EOF_SECURITY_CACRT'
------BEGIN CERTIFICATE-----
-MIIDAjCCAeqgAwIBAgIJAIlXuoM/3CMrMA0GCSqGSIb3DQEBCwUAMC4xGjAYBgNV
-BAMMEUhvbWVMYWItUm91dGVyLUNBMRAwDgYDVQQKDAdIb21lTGFiMB4XDTI2MTAw
-MjAzMjEwMVoXDTM2MDkyOTAzMjEwMVowLjEaMBgGA1UEAwwRSG9tZUxhYi1Sb3V0
-ZXItQ0ExEDAOBgNVBAoMB0hvbWVMYWIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAw
-ggEKAoIBAQDDzOopGgviHwZFUkrkXmlVK8rKLHVjVGZcPFWz7BUYqcOuXzqKGeEm
-ewkLL1MqgzhJVqgdnL1aom5avuinhf8hVJrMapQZ4kVQdweCVOA3uiVOnVXhie9K
-oK5ysxG7yltOAZcU2MjZ9uXj9oIavJa99vbnzSCVg1PZBSNUvCAkqW08WRFU+Nqe
-BaPbBeiBvnmg6E6C34xB4le3DtkiYlEERvnPTWuYFyaCC0rJpK3Wh3Xl7KX8FRNw
-cuzeNKprCnXiQwXAW2ayXT5l3HKd7IBjpRX0YialbpiuU2Cezo6XLoHY+1BJ5yMg
-4jYclci5crrEBeVYaAkv21OA7Gd5NQC7AgMBAAGjIzAhMA8GA1UdEwEB/wQFMAMB
-Af8wDgYDVR0PAQH/BAQDAgEGMA0GCSqGSIb3DQEBCwUAA4IBAQCfdGgPEOFG1Dh8
-oAHlo1dWbE/VvofBsnhoCZ5AH5IXt9c0VwqsH0eWdxmcq4sOOb9uaCHbO0p4LPOo
-apLVNBUJP2dKm2+gpn53EEL5lOEV+uQb/ZYvR+n73IhLLRuRB0VFrWgqO18NM3xd
-aR5wvAI0O10PTLxKza4lTv4+rn1t6OO9K5/DwECLmIg5FJtrVndFiX7B8oXyXRwl
-Ix4HNHjwjyOVQrGC3/6ce5loVYXSNp9mhZ/GINqf7QmT0uSn5cLFeol3KSBLXmO1
-G2K6B0m6kLG872jGu0qZqqBOwu+LgXBaJ/6a+eTWpZ9Bep+vWmyc94DWXwX+dsRB
-2l34Qg/S
------END CERTIFICATE-----
-EOF_SECURITY_CACRT
+# ---- 1+2. 证书资产 —— 编译期不再固化任何私钥 -------------------------
+# 设计要点:
+#   固件镜像与公开仓库里都不再存 CA 私钥/服务器私钥。改为设备首次启动时
+#   在本机生成, 落到 overlay 的 /etc/uhttpd/ (chmod 600) —— 每台设备的密钥
+#   都不同, 攻击者即便拿到公开仓库里的固件也提取不到任何私钥。
+#   uhttpd-cert-sync 的重签逻辑保持不变, 只是改用它本机生成的 CA,
+#   因此 DHCP 换 IP 后的证书自适应能力完全保留。
+#
+#   cert-bootstrap 的序号必须是 97: 要保证它在 98(cert-sync hook) 与
+#   99(security-hardening) 之前跑完 —— 否则加固脚本做 -s 检查时证书还没生成,
+#   HTTPS 会被判定为"缺证书"而跳过。
+cat > files/etc/uci-defaults/97-zz-cert-bootstrap <<'EOF_SECURITY_BOOTSTRAP'
+#!/bin/sh
+# ==============================================================================
+#  首次启动: 现场生成私有 CA + uhttpd 服务器证书
+#  路径: files/etc/uci-defaults/97-zz-cert-bootstrap
+#  私钥只存本机, 不写入固件镜像, 不进公开仓库
+# ==============================================================================
+LOG=/root/security-hardening.log
+DIR_=/etc/uhttpd
 
-cat > files/etc/uhttpd/ca.key <<'EOF_SECURITY_CAKEY'
------BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEAw8zqKRoL4h8GRVJK5F5pVSvKyix1Y1RmXDxVs+wVGKnDrl86
-ihnhJnsJCy9TKoM4SVaoHZy9WqJuWr7op4X/IVSazGqUGeJFUHcHglTgN7olTp1V
-4YnvSqCucrMRu8pbTgGXFNjI2fbl4/aCGryWvfb2580glYNT2QUjVLwgJKltPFkR
-VPjangWj2wXogb55oOhOgt+MQeJXtw7ZImJRBEb5z01rmBcmggtKyaSt1od15eyl
-/BUTcHLs3jSqawp14kMFwFtmsl0+ZdxyneyAY6UV9GImpW6YrlNgns6Oly6B2PtQ
-SecjIOI2HJXIuXK6xAXlWGgJL9tTgOxneTUAuwIDAQABAoIBAQCP0AqNddwUkcUB
-VZg8dDvZmviv1kfCVVN5m7c3F8fG/aoEgV114dxFb0kNNg1XxFmrRELmvSE3WObF
-MEOiCAGEcafhTMbK3C8dEtApIj4tsEOGonlZ1v4zSiHXjT8RN2gou3JElZWwwm/I
-KF8XVD1D+gkP6NJt/q+vTt7MdgEF60IVZcBTTDuuvXHKDMyiQ3cZhP+yxJuprsGI
-WkPB67gTwxtkKAXNOoB7p6JvD6wEYplCp5lNx3Wc7GRQl/eta6vAnL8PMitOiC/X
-/y/TUOHlyxlTFU6uNhYlPcqJfA8eHIQ9m8n6a4vw3qeoX2P/KgQio/lr0gUds8/J
-A0Fp1xHBAoGBAO4eezYeGihcVetGg5IjwQnFR+EZ/q7+rWFZ2az4qUBa6Vhyo0N0
-xgrN95rD1o9D73KGZqHG3uqSLw3I8W6dF2tPZlGb60XhgJG85if925qEj1DxmW69
-AKA1k5RINBqOR00kwETycUl7uuIP/ElW1N5+iMD0BTTAdNPcx7/n/xPfAoGBANKA
-6jTwQvuiATyPlM8z/xbISfeZyJQtaRBzGUhvE2wjdMeoSyQRciLcaPXOJMT90UAO
-+qgm6Xk266quqUH80UDh3hwE3LwwyPESvKR4J2tuRMmod0aWwhqIjjDLJQXUK09I
-t2inoWIx1v+ZsAYYCzqdLQGXKvY3322Tcu0wKQ6lAoGALhIntKjOVtDGrubNvhC8
-4K8S4TKuXB1aXmOMAjN6S8FLNJm5jOujBaQkLAWIFeAHDBmE8fgQWUI/aGNgkw5B
-4blTCqcoNjUTMx9hSIuNWbAcKoUUMqDO5jB3hVETA7BTi1F5Ad4GnTkbR3HgVjA+
-r22799k+yJ4T/InS/AZfC/ECgYAEGtt2WNEVkx0vDyW5vKvWx+UZXPhaW2BXH8d4
-cCIS08YtNozwkR6Gq4GoeXKiHMj91Mzyhn+7C2UhGPLYBJQYDc+FAFtFmDXy7Yic
-NHOgVrAktpJM4Be86LjNHskEChUmIKbi9ZHiFlK4/Ug/diyR4grEoywFTSWgP2XY
-Vj4WuQKBgHdb5nQezWZaORaEpI3sXXeMB1pxj+Thb9K+gAg39DozO7yOGr+e4oRu
-puFeXvKZTxz3XhjftkI+MyWDWaVlpEKKKO9zb13YgTV+zf/4NcMmL2D6LTxXyqCu
-15OthLMwVhzjMp/BWDmbtq4/hlFn/+mNWPquAv0WKTAS9Z82RhkL
------END RSA PRIVATE KEY-----
-EOF_SECURITY_CAKEY
+mkdir -p "$DIR_" 2>/dev/null || exit 0
 
-# ---- 2. CA 签发的服务器证书（10 年，SAN 含 IP 与多个主机名）-------------
-cat > files/etc/uhttpd/uhttpd.crt <<'EOF_SECURITY_CERT'
------BEGIN CERTIFICATE-----
-MIIDUzCCAjugAwIBAgIJAKyD0egdnftvMA0GCSqGSIb3DQEBCwUAMC4xGjAYBgNV
-BAMMEUhvbWVMYWItUm91dGVyLUNBMRAwDgYDVQQKDAdIb21lTGFiMB4XDTI2MTAw
-MjAzMjExMFoXDTM2MDkyOTAzMjExMFowJzETMBEGA1UEAwwKT3BlbldydC1OMTEQ
-MA4GA1UECgwHSG9tZUxhYjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEB
-ALz3OU8xVcrn2eZzytjECDj/BPcKiG3iY5w6pVjPM0IIlB7nIGHvszE5mimXsZg4
-mhiaiUz6rFNYoLBs1bD9y8EXWHsPFnXnAXt8fEtnLNHxl5HxW15B+dnVmxSIl6m6
-nHdwbbj+0t3Hk85PZWJ31UaMftOmDXluE4lOncapsVZpBYwv7+0u/guhKNXbTBfw
-F83bIal0NEoy3vElsd8fzPU/8YCkheIyoIR2TpcmfjeSrDWp5ssc1vnpa5BpE++G
-qwn+N43Gq9r4byTiBTBlUkeQzo04L+Q9JbPSKDjc2Ye+RAsXjxomN+m0bJ3xde7n
-jWMpWIZcO7rOQr0QF/y7De8CAwEAAaN7MHkwVwYDVR0RBFAwTocEwKgyyIcEfwAA
-AYIKT3BlbldydC1OMYIQT3BlbldydC1OMS5sb2NhbIILb3BlbndydC5sYW6CCnJv
-dXRlci5sYW6CCWxvY2FsaG9zdDATBgNVHSUEDDAKBggrBgEFBQcDATAJBgNVHRME
-AjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCq/F2R7JKx790n9vIpJv5dJtR7bzUzIhEK
-EBpdL8HTVizjEK5c49STsqP/b/IlayYPV1LZYUA/cmidB/pTTq0NwicRU6Q4Hfpa
-/7dam6X7MLp4YfVeBOjaP45Rjm0fq2ebEG8Vvb4G2wZmNVD+a0UoI0Ah+VxY65zQ
-f0yASVmyYHvi5i9yeqsTygVyl4z9nxqWF0xBkWlDavLGc2bXELdeUeGJa1ltc9NH
-teQ3YcdW93yPgUgGzK52Q/gQvSdMOCT5+POn/zy/DJ7/0sHjDi0bEypVXEnKZiZ/
-M9M/gBt1XjC1Ea/85Tq6BkCjOD2Obe8wUdq8S8FsCwgxDfwMpPkS
------END CERTIFICATE-----
-EOF_SECURITY_CERT
+# 没有 openssl 就直接放弃, 绝不改动/破坏现有证书
+command -v openssl >/dev/null 2>&1 || {
+    echo "[SKIP] cert-bootstrap: 无 openssl, 保持现有配置" >>"$LOG"; exit 0; }
 
-cat > files/etc/uhttpd/uhttpd.key <<'EOF_SECURITY_KEY'
------BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEAvPc5TzFVyufZ5nPK2MQIOP8E9wqIbeJjnDqlWM8zQgiUHucg
-Ye+zMTmaKZexmDiaGJqJTPqsU1igsGzVsP3LwRdYew8WdecBe3x8S2cs0fGXkfFb
-XkH52dWbFIiXqbqcd3BtuP7S3ceTzk9lYnfVRox+06YNeW4TiU6dxqmxVmkFjC/v
-7S7+C6Eo1dtMF/AXzdshqXQ0SjLe8SWx3x/M9T/xgKSF4jKghHZOlyZ+N5KsNanm
-yxzW+elrkGkT74arCf43jcar2vhvJOIFMGVSR5DOjTgv5D0ls9IoONzZh75ECxeP
-GiY36bRsnfF17ueNYylYhlw7us5CvRAX/LsN7wIDAQABAoIBAAVKes1P2VIcGcrN
-FTHqkzxdT5tHLTi+bQGT1stcydege909pXd4ibDoJvvhJnTXqODletCv+CFBSwaF
-lZomEQ1wBOc1LfDRLgZyHtzRn7ylIhRRCLjj6gYCaBw0EuMKuZTSjg/u+qKBEw9k
-w7b1GgCmsGpmrNvojB19GQfV+oQr0jq0enzfT1/c8/lSgUMIQ3W1FBB947s+2M9+
-ZExSxzPz+EQgXB+DRW7va6p9LpPhIVHDejr5E1MDbBCEsUrRvzXukb34y531FvJK
-lz1XRHOsxMMoLUYAPKQ7bTI6Rey+ZBSlZ+XCBavgzBoTkBIWtDlHFAQEhGvy7Ibx
-mcmNjVkCgYEA9Yy6IOkUcIGf4liA4xVM19PC3bINMaR8bpCMgTU83suYKZ6ThKPk
-7HeuMhDpMCU7r4ovzkYtd7HxHWLZFwXgl8zoGF3StYBaUHb2EYhjpImnibUzfUgJ
-Qk6yK2clEit/hd27pHx0dyYqAYjeJi3nk2plzJDiaqn+B35tx3EBwcUCgYEAxQID
-Gtw7cVWA8wZI49ff3i9P9i4Ytt/ya5YkT2U8s3d6RSYzAqf/Kr5l0BX0nHeqG2By
-+0yH0IzsS/RCB03zW/fH5wdrlFAyA2v/jG3CpjdkrIKB6s7GAS9DyCICiNuSwIsu
-XEsdrGjLSwND1yB0s80OJLVd2ny+3ab4JogwUCMCgYEAn3jlDSizGJpm/zahhlm4
-DVe/cAIKJZqBIcGJLwUnYj7xtN4DSpqyu4zCuktXVuhnigsCH0JelyUexgoDmbs8
-cPooJmMQzMXuYeHQz/Q3Wo34HCxto0jcko7PkfasEc/kQ0mNazdU4GkN0O9V74/S
-nV/1e1UBZ2q9y5olq+jNzk0CgYByXk6rIzsm+jpX20gpbUM7W0ASbIRQdgXny0vd
-A6qPjUbgKeLnIdwSVmIIwRY2V4nbRsy5cp5NxeHP3kcOsoQa2eelCTu86CmArwu1
-3Gpp0DKTq1f8lnmAao3w+z15ce7p9GK/laPuWQ/bxlN16hOV5e7WBKwtkMnFJ49b
-3ygc/QKBgQDybrD+e+mWht+ogsUKuqNXuWTU4ZmBVMVDt9oznjhInSUi/WZ0FeAe
-+aSYBvri8+WYQfphTOMnwLOan7VCILqMyhvUIVji1TeE1DIMYmqZ5Kl2KrukEZBv
-qgEZJ45y+n/yYEk5lCHxzVJA44/pJry8AM3tjEI13MovB88LYPdSww==
------END RSA PRIVATE KEY-----
-EOF_SECURITY_KEY
-chmod 600 files/etc/uhttpd/uhttpd.key files/etc/uhttpd/ca.key
+# ---- 1. 私有 CA: 不存在才生成, 存在则复用(保证 IP 重签时始终是同一个 CA) --
+if [ ! -s "$DIR_/ca.key" ] || [ ! -s "$DIR_/ca.crt" ]; then
+    openssl ecparam -genkey -name prime256v1 -out "$DIR_/ca.key" 2>/dev/null
+    openssl req -x509 -new -key "$DIR_/ca.key" -sha256 -days 3650 \
+        -subj "/CN=HomeLab-Router-CA/O=HomeLab" \
+        -out "$DIR_/ca.crt" 2>/dev/null
+    echo "[OK] cert-bootstrap: 已生成本机私有 CA (ECDSA prime256v1)" >>"$LOG"
+fi
+
+# ---- 2. 服务器私钥 -------------------------------------------------------
+if [ ! -s "$DIR_/uhttpd.key" ]; then
+    openssl ecparam -genkey -name prime256v1 -out "$DIR_/uhttpd.key" 2>/dev/null
+fi
+
+chmod 600 "$DIR_/ca.key" "$DIR_/uhttpd.key" 2>/dev/null
+
+# ---- 3. 用本机 CA 签发服务器证书 -----------------------------------------
+# SAN 先只放主机名; 当前 LAN IP 随后由 uhttpd-cert-sync 检测并补签
+if [ ! -s "$DIR_/uhttpd.crt" ]; then
+    openssl req -new -key "$DIR_/uhttpd.key" \
+        -subj "/CN=OpenWrt-N1/O=HomeLab" -out /tmp/.bootstrap.csr 2>/dev/null
+    {
+        echo "subjectAltName=DNS:OpenWrt-N1,DNS:OpenWrt-N1.local,DNS:openwrt.lan,DNS:router.lan,DNS:localhost"
+        echo "extendedKeyUsage=serverAuth"
+        echo "basicConstraints=CA:FALSE"
+    } > /tmp/.bootstrap.ext
+    openssl x509 -req -in /tmp/.bootstrap.csr \
+        -CA "$DIR_/ca.crt" -CAkey "$DIR_/ca.key" -CAcreateserial \
+        -out "$DIR_/uhttpd.crt" -days 3650 -sha256 -extfile /tmp/.bootstrap.ext 2>/dev/null
+    rm -f /tmp/.bootstrap.csr /tmp/.bootstrap.ext
+    echo "[OK] cert-bootstrap: 已签发服务器证书" >>"$LOG"
+fi
+
+exit 0
+EOF_SECURITY_BOOTSTRAP
+chmod +x files/etc/uci-defaults/97-zz-cert-bootstrap
 
 # ---- 3. 证书自动同步（开机检测 IP 变化则重签）---------------------------
 cat > files/usr/sbin/uhttpd-cert-sync <<'EOF_SECURITY_CERTSYNC'

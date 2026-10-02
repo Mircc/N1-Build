@@ -353,4 +353,6 @@ gh workflow run build-x86.yml --repo <owner>/N1-Build
 3. 任何涉及 `immo_diy.sh` 的改动都要考虑 `sync-upstream.yml` 每半月会覆盖它——保留块用 `99-set-default-ip` 标记。
 4. N1 与 X86 的 `.config` / entrypoint 配置**分开维护**，改一处要同步另一处。
 5. 编译失败先看 Actions 日志里的 `make -j1 V=s` 输出，优先怀疑：依赖缺失（APK 严格）、插件源码 URL 失效、磁盘空间。
-6. **私钥红线**：`private-keys/`、SSH 私钥、`*.key`/`*.pem` **绝不进公开仓库**，`.gitignore` 已加固拦截。已知例外与残余风险：为支持 `uhttpd-cert-sync` 在 LAN IP（DHCP 自适应）变化时用内置 CA 重签服务器证书，**CA 私钥固化在 `security/immo_diy-security.sh` 里**，进公开仓库等同公开该 CA。可接受的前提是它只用于本机自签 HTTPS 管理面；若安全要求更高，应改为**首次启动现场生成**。
+6. **私钥红线（零私钥入库）**：`private-keys/`、SSH 私钥、`*.key`/`*.pem` **绝不进公开仓库**，`.gitignore` 已加固拦截。HTTPS 必需服务器私钥，但**不在编译期固化**——由 `files/etc/uci-defaults/97-zz-cert-bootstrap` 在设备**首次启动时现场生成**私有 CA（ECDSA `prime256v1`）与服务器证书，落入 `/etc/uhttpd/`（`chmod 600`）。序号必须 **`97 < 98`(cert-sync hook) `< 99`(security-hardening)，保证加固脚本做 `-s` 检查时证书已就位。
+   **关键约束：重复执行必须幂等（已存在则复用）**，否则每次重启都换新 CA，客户端信任会被作废——本机实跑已验证幂等。`uhttpd-cert-sync` 逻辑不变，仅改用本机 CA 重签，DHCP 换 IP 自适应能力保留。代价：刷机后客户端需重新信任一次 CA。
+   ⚠️ **历史教训**：曾把 CA 私钥以 PEM 明文写死在 `security/immo_diy-security.sh` 并推送（提交 `ec67e65`）。**git 历史不可逆，该 CA 应视为已泄露并永久弃用**——这正是改为现场生成的直接原因。切勿再把任何私钥写进脚本/固件。
