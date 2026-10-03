@@ -565,28 +565,28 @@ if [ "$ENABLE_FIREWALL_LOCK" = 1 ]; then
 fi
 
 if [ "$ENABLE_RATE_LIMIT" = 1 ]; then
-    # SSH: 每源 IP 每分钟最多 30 个新连接(突发 10)
-    # 注意: 初版设 8/min 实测过紧 —— 连续开几个终端/scp/rsync 就会超限被 DROP,
-    #       表现为 ssh 随机 "Operation timed out", 极易被误判为网络问题。
-    #       30/min 对暴力破解仍是数量级压制, 对正常使用则绰绰有余。
-    uci set firewall.ssh_rate_accept=rule
-    uci set firewall.ssh_rate_accept.name='Sec-SSH-RateLimit'
-    uci set firewall.ssh_rate_accept.src='lan'
-    uci set firewall.ssh_rate_accept.proto='tcp'
-    uci set firewall.ssh_rate_accept.dest_port='22'
-    uci set firewall.ssh_rate_accept.limit='30/minute'
-    uci set firewall.ssh_rate_accept.limit_burst='10'
-    uci set firewall.ssh_rate_accept.target='ACCEPT'
-
-    uci set firewall.ssh_rate_drop=rule
-    uci set firewall.ssh_rate_drop.name='Sec-SSH-RateDrop'
-    uci set firewall.ssh_rate_drop.src='lan'
-    uci set firewall.ssh_rate_drop.proto='tcp'
-    uci set firewall.ssh_rate_drop.dest_port='22'
-    uci set firewall.ssh_rate_drop.target='DROP'
+    # --------------------------------------------------------------------------
+    # SSH: 局域网内【不再】限速 —— 2026-10-03 决策
+    #   前提: 本加固已关闭 SSH 密码登录(PasswordAuth=off / RootPasswordAuth=off),
+    #         只认 ed25519 密钥。ed25519 私钥空间约 2^251, 穷举在数学上不可行,
+    #         局域网 TCP 层的暴力破解没有任何实际收益。
+    #   反噬: 实测 8/min 会让 VS Code Remote(开 Remote 会连开多条 session)、
+    #         多终端、scp/rsync 批量传输频繁超限被 DROP, 表现为随机的
+    #         "Operation timed out", 极易被误判成网络故障(已踩过)。
+    #   结论: 主动删除旧版本的 SSH 限速规则(含从旧固件升级带上来的), 保证幂等。
+    #         保留 SSH 仅监听 LAN + 禁 WAN 管理口, 这两项才是真正有效的边界。
+    # --------------------------------------------------------------------------
+    if uci -q get firewall.ssh_rate_accept >/dev/null 2>&1 \
+       || uci -q get firewall.ssh_rate_drop >/dev/null 2>&1; then
+        uci -q delete firewall.ssh_rate_accept
+        uci -q delete firewall.ssh_rate_drop
+        SSH_LIMIT_REMOVED=1
+    fi
 
     # LuCI + ttyd: 每源 IP 每分钟最多 120 个新连接(突发 20)
     # 网页一次刷新会开多个连接(HTTP/1.1 并发 + 跳转 HTTPS), 30/min 会明显卡顿
+    # 注意: Web 仍是密码登录(root/password), 所以这条限速必须保留 ——
+    #       它是目前唯一还能防住口令爆破的环节
     uci set firewall.web_rate_accept=rule
     uci set firewall.web_rate_accept.name='Sec-LuCI-RateLimit'
     uci set firewall.web_rate_accept.src='lan'
@@ -603,7 +603,10 @@ if [ "$ENABLE_RATE_LIMIT" = 1 ]; then
     uci set firewall.web_rate_drop.dest_port='80 443 7681'
     uci set firewall.web_rate_drop.target='DROP'
 
-    echo "[OK] firewall: 登录限速已写入 (SSH 30/min burst 10, LuCI+ttyd 120/min burst 20)"
+    if [ "${SSH_LIMIT_REMOVED:-0}" = 1 ]; then
+        echo "[OK] firewall: 已删除 SSH 局域网限速(仅密钥登录, 无限速必要), 避免误杀多终端/scp"
+    fi
+    echo "[OK] firewall: 登录限速已写入 (SSH 不限速, LuCI+ttyd 120/min burst 20)"
 fi
 uci commit firewall
 
