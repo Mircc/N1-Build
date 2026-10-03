@@ -368,7 +368,10 @@ jobs:
         tag: ${{ env.PRODUCT_NAME }}
         commit: main
         token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: ${{ github.workspace }}/openwrt/bin/targets/x86/64/*
+        # 只发布常用的两个 combined-efi 镜像 + 校验/元信息文件。
+        # 其余(rootfs.tar.gz / kernel.bin / 非 EFI 镜像等)约 1.9GB 用不上，不再上传。
+        # removeArtifacts: true 保证每次发布先清空旧资产 —— 只保留最新一次成功编译。
+        artifacts: ${{ github.workspace }}/openwrt/bin/targets/x86/64/*ext4-combined-efi.img.gz,${{ github.workspace }}/openwrt/bin/targets/x86/64/*squashfs-combined-efi.img.gz,${{ github.workspace }}/openwrt/bin/targets/x86/64/*.manifest,${{ github.workspace }}/openwrt/bin/targets/x86/64/md5sums.txt,${{ github.workspace }}/openwrt/bin/targets/x86/64/sha256sums,${{ github.workspace }}/openwrt/bin/targets/x86/64/config.buildinfo,${{ github.workspace }}/openwrt/bin/targets/x86/64/version.buildinfo,${{ github.workspace }}/openwrt/bin/targets/x86/64/profiles.json,${{ github.workspace }}/openwrt/bin/targets/x86/64/feeds.buildinfo
         body: |
           # 🖥️ ImmortalWrt for X86_64 固件
 

@@ -27,6 +27,10 @@ env:
   REPO_BRANCH: master
   UPLOAD_FIRMWARE: false
   UPLOAD_RELEASE: true
+  # 是否把通用 aarch64(armsr) 镜像也传上 Release。
+  # 这些镜像 N1 根本刷不了(刷机只用 openwrt_amlogic_s905d_*.img.gz)，
+  # 却有 1.1GB+，仓库长期被撑爆。默认关闭，需要时改成 true。
+  UPLOAD_AARCH64_GENERIC: false
   SWAP: false
   DIY_SH: immo_diy.sh
   TZ: Asia/Shanghai
@@ -388,7 +392,9 @@ jobs:
         tag: ${{ env.PRODUCT_NAME }}
         commit: main
         token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
+        # 只发布 N1 真正能刷的 amlogic 镜像 + 编译配置记录。
+        # 其余(rootfs.tar.gz / Packages.tar.gz 等)占 950MB 且用不上，不再上传。
+        artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*.img.gz,${{ env.PACKAGED_OUTPUTPATH }}/config-immo.txt
         body: |
           # 📦 ImmortalWrt for N1 (s905d) 固件
 
@@ -445,7 +451,7 @@ jobs:
 
     - name: Upload generic aarch64 images to Release
       uses: ncipollo/release-action@main
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && env.UPLOAD_AARCH64_GENERIC == 'true' && !cancelled()
       with:
         name: ${{ env.VER }} for ${{ env.PRODUCT_NAME }}
         allowUpdates: true
