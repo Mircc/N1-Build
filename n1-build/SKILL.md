@@ -360,3 +360,62 @@ gh workflow run build-x86.yml --repo <owner>/N1-Build
 6. **私钥红线（零私钥入库）**：`private-keys/`、SSH 私钥、`*.key`/`*.pem` **绝不进公开仓库**，`.gitignore` 已加固拦截。HTTPS 必需服务器私钥，但**不在编译期固化**——由 `files/etc/uci-defaults/97-zz-cert-bootstrap` 在设备**首次启动时现场生成**私有 CA（ECDSA `prime256v1`）与服务器证书，落入 `/etc/uhttpd/`（`chmod 600`）。序号必须 **`97 < 98`(cert-sync hook) `< 99`(security-hardening)，保证加固脚本做 `-s` 检查时证书已就位。
    **关键约束：重复执行必须幂等（已存在则复用）**，否则每次重启都换新 CA，客户端信任会被作废——本机实跑已验证幂等。`uhttpd-cert-sync` 逻辑不变，仅改用本机 CA 重签，DHCP 换 IP 自适应能力保留。代价：刷机后客户端需重新信任一次 CA。
    ⚠️ **历史教训**：曾把 CA 私钥以 PEM 明文写死在 `security/immo_diy-security.sh` 并推送（提交 `ec67e65`）。**git 历史不可逆，该 CA 应视为已泄露并永久弃用**——这正是改为现场生成的直接原因。切勿再把任何私钥写进脚本/固件。
+
+---
+
+## 12. 刷机后实机核验清单（只看 CI 全绿是不够的）
+
+编译成功 ≠ 加固生效。2026-10-03 首次把这版固件刷上真机后，用一份命令就把所有落点验清楚了，后续每次改动沿用。
+
+### 12.1 先找设备（新固件是 DHCP，IP 会变）
+
+```bash
+arp -a | grep -iE "fc:7c:02|192\.168\.50\.2"     # 用已知 MAC 定位
+ping -c 3 <IP>                                    # 通了再试连
+nc -z -w 3 <IP> 22 && nc -z -w 3 <IP> 443         # 22/443 应开放
+```
+
+⚠️ **`ssh` 报 `No route to host` 不要急着排查防火墙**：同子网里这个错通常是 **ARP 未解析**（设备还在启动 / 还没拿到 DHCP 租约），macOS 会用 `No route to host` 而不是 timeout。等 1–2 分钟重试即可。
+⚠️ **必须带私钥**：新固件 `PasswordAuth=off`，不带 `-i` 一律 `Permission denied (publickey)`。
+
+### 12.2 一次性核验全部加固项
+
+```bash
+K=~/path/to/n1_root_ed25519
+ssh -i "$K" root@<IP> '
+uci show dropbear.@dropbear[0] | grep -E "PasswordAuth|Interface"
+ls -l /etc/dropbear/authorized_keys
+uci show uhttpd.main | grep -E "listen_|redirect_|cert|key"
+uci show ttyd | grep -E "command|interface"
+uci show firewall | grep -c limit
+uci get dhcp.@dnsmasq[0].localservice
+ls /etc/uci-defaults/
+cat /proc/sys/kernel/hostname; uci get system.@system[0].hostname
+'
+```
+
+**判读标准**：
+
+| 检查项 | 期望值 |
+|---|---|
+| `dropbear.PasswordAuth` / `RootPasswordAuth` | `off` |
+| `dropbear.Interface` | `lan`（不对外暴露） |
+| `/etc/dropbear/authorized_keys` | 存在，权限 `600` |
+| `uhttpd.redirect_https` | `1`，`listen_https` 存在 |
+| `uhttpd.cert` / `.key` | `/etc/uhttpd/uhttpd.crt|key`（不是根下的 `/etc/uhttpd.crt`） |
+| `ttyd.command` | `/bin/login`（不再是免认证 shell） |
+| `firewall` limit 规则数 | > 0 |
+| `dnsmasq.localservice` | `1` |
+| `/etc/uci-defaults/` | **空** = 所有脚本执行过并自删（非空则说明没跑） |
+| 主机名 | `OpenWrt-N1` |
+
+最后一行要特别注意：曾出现真机主机名实际是 `Hongmeng` 的情况，多半是**升级时选了「保留配置」**、旧 `system` 配置覆盖了 `99-set-default-ip` 的设置。手工纠：
+
+```bash
+uci set system.@system[0].hostname='OpenWrt-N1'; uci commit system; /etc/init.d/system reload
+```
+
+### 12.3 顺手做两件省心事
+
+- **在主路由按 MAC 绑定静态租约**（N1 的 MAC 已知），否则每次续租 IP 都可能漂移，SSH known_hosts 也一直报警
+- **本机 `~/.ssh/config` 加别名**：`Host n1 / HostName <IP> / User root / IdentityFile <私钥>`，之后 `ssh n1` 即可
