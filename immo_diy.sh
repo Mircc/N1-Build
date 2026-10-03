@@ -92,6 +92,10 @@ git clone --depth 1 https://github.com/sbwml/packages_utils_containerd feeds/pac
 git clone --depth 1 https://github.com/sbwml/packages_utils_runc feeds/packages/utils/runc
 git clone --depth 1 https://github.com/svenshi/luci-app-oxidns package/luci-app-oxidns
 svn_export "master" "luci-app-tailscale-community" "package/luci-app-tailscale" "https://github.com/Tokisaki-Galaxy/luci-app-tailscale-community"
+# 修复上游 bug: tailscale.js 用了 lastDevicesStatus 但从未声明, 文件又是 'use strict',
+# 严格模式下给未声明变量赋值直接抛 ReferenceError -> 打开 Tailscale 页面即报
+# "lastDevicesStatus is not defined", 状态/设备列表刷新全部中断。补一行声明即可。
+sed -i "s|^let map;$|let map;\nlet lastDevicesStatus;|" package/luci-app-tailscale/htdocs/luci-static/resources/view/tailscale.js
 svn_export "master" "applications/luci-app-cloudflared" "feeds/luci/applications/luci-app-cloudflared" "https://github.com/openwrt/luci"
 svn_export "main" "luci-app-bandix" "package/luci-app-bandix" "https://github.com/timsaya/luci-app-bandix"
 svn_export "main" "openwrt-bandix" "package/openwrt-bandix" "https://github.com/timsaya/openwrt-bandix"

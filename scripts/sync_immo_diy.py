@@ -112,6 +112,42 @@ TURBOACC_PATCH_RM = "rm -f package/network/utils/nftables/patches/100-nftables-a
 # 需要在 feeds 中移除以避免版本冲突的目录（配合上面的本地克隆）
 LOCAL_EXTRA_RM = """rm -rf feeds/luci/applications/luci-app-homeproxy"""
 
+# 上游 Tokisaki-Galaxy/luci-app-tailscale-community 的 JS bug：
+#   htdocs/luci-static/resources/view/tailscale.js 使用了变量 lastDevicesStatus，
+#   但全文件从未声明（只有 `let map;`），而文件首行是 'use strict'。
+#   严格模式下给未声明变量赋值会直接抛 ReferenceError，结果是打开 LuCI 的
+#   Tailscale 页面就报 "lastDevicesStatus is not defined"，状态轮询与设备列表刷新全断。
+#   修法：在 `let map;` 后补一行 `let lastDevicesStatus;`。
+TAILSCALE_EXPORT_MARKER = 'svn_export "master" "luci-app-tailscale-community"'
+TAILSCALE_JS_FIX = (
+    'sed -i "s|^let map;$|let map;\\nlet lastDevicesStatus;|" '
+    'package/luci-app-tailscale/htdocs/luci-static/resources/view/tailscale.js'
+)
+
+
+def ensure_tailscale_js_fix(content):
+    """幂等地确保 tailscale.js 的未声明变量修复存在（缺则补在导出行之后）。"""
+    if TAILSCALE_JS_FIX in content:
+        print("tailscale.js undeclared-variable fix already present")
+        return content
+
+    if TAILSCALE_EXPORT_MARKER not in content:
+        print("WARNING: tailscale export line not found, JS fix skipped")
+        return content
+
+    lines = content.splitlines()
+    for idx, line in enumerate(lines):
+        if TAILSCALE_EXPORT_MARKER in line:
+            lines[idx + 1:idx + 1] = [
+                '# 修复上游 bug: tailscale.js 用了 lastDevicesStatus 但从未声明, 文件又是 \'use strict\',',
+                '# 严格模式下给未声明变量赋值直接抛 ReferenceError -> 打开页面即报',
+                '# "lastDevicesStatus is not defined"。补一行声明即可。',
+                TAILSCALE_JS_FIX,
+            ]
+            print("Re-added tailscale.js undeclared-variable fix (avoid 'lastDevicesStatus is not defined')")
+            break
+    return '\n'.join(lines)
+
 # 安全加固块的 golden source 与边界标记。
 # 加固块内联在 immo_diy.sh 末尾，而 immo_diy.sh 每次半月同步会被上游整体覆盖，
 # 一旦缺失管理面就会静默退回 HTTP 明文 + SSH 密码登录（最难察觉的一类故障）。
@@ -346,6 +382,7 @@ def apply_local_customizations(content):
 
     # 先确保「回到源码根」，否则下面补的 files/ 内容会落进 package 子目录
     result = ensure_root_cd(result)
+    result = ensure_tailscale_js_fix(result)
 
     # 安全加固块必须与上面的定制一起在同步后存活（缺失 = 管理面退回明文 HTTP）
     result = ensure_security_block(result)
