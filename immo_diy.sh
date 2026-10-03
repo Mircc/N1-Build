@@ -565,13 +565,17 @@ if [ "$ENABLE_FIREWALL_LOCK" = 1 ]; then
 fi
 
 if [ "$ENABLE_RATE_LIMIT" = 1 ]; then
-    # SSH: 每源 IP 每分钟最多 8 个新连接
+    # SSH: 每源 IP 每分钟最多 30 个新连接(突发 10)
+    # 注意: 初版设 8/min 实测过紧 —— 连续开几个终端/scp/rsync 就会超限被 DROP,
+    #       表现为 ssh 随机 "Operation timed out", 极易被误判为网络问题。
+    #       30/min 对暴力破解仍是数量级压制, 对正常使用则绰绰有余。
     uci set firewall.ssh_rate_accept=rule
     uci set firewall.ssh_rate_accept.name='Sec-SSH-RateLimit'
     uci set firewall.ssh_rate_accept.src='lan'
     uci set firewall.ssh_rate_accept.proto='tcp'
     uci set firewall.ssh_rate_accept.dest_port='22'
-    uci set firewall.ssh_rate_accept.limit='8/minute'
+    uci set firewall.ssh_rate_accept.limit='30/minute'
+    uci set firewall.ssh_rate_accept.limit_burst='10'
     uci set firewall.ssh_rate_accept.target='ACCEPT'
 
     uci set firewall.ssh_rate_drop=rule
@@ -581,13 +585,15 @@ if [ "$ENABLE_RATE_LIMIT" = 1 ]; then
     uci set firewall.ssh_rate_drop.dest_port='22'
     uci set firewall.ssh_rate_drop.target='DROP'
 
-    # LuCI + ttyd: 每源 IP 每分钟最多 30 个新连接
+    # LuCI + ttyd: 每源 IP 每分钟最多 120 个新连接(突发 20)
+    # 网页一次刷新会开多个连接(HTTP/1.1 并发 + 跳转 HTTPS), 30/min 会明显卡顿
     uci set firewall.web_rate_accept=rule
     uci set firewall.web_rate_accept.name='Sec-LuCI-RateLimit'
     uci set firewall.web_rate_accept.src='lan'
     uci set firewall.web_rate_accept.proto='tcp'
     uci set firewall.web_rate_accept.dest_port='80 443 7681'
-    uci set firewall.web_rate_accept.limit='30/minute'
+    uci set firewall.web_rate_accept.limit='120/minute'
+    uci set firewall.web_rate_accept.limit_burst='20'
     uci set firewall.web_rate_accept.target='ACCEPT'
 
     uci set firewall.web_rate_drop=rule
@@ -597,7 +603,7 @@ if [ "$ENABLE_RATE_LIMIT" = 1 ]; then
     uci set firewall.web_rate_drop.dest_port='80 443 7681'
     uci set firewall.web_rate_drop.target='DROP'
 
-    echo "[OK] firewall: 登录限速已写入 (SSH 8/min, LuCI+ttyd 30/min)"
+    echo "[OK] firewall: 登录限速已写入 (SSH 30/min burst 10, LuCI+ttyd 120/min burst 20)"
 fi
 uci commit firewall
 
