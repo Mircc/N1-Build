@@ -93,8 +93,8 @@ git clone --depth 1 https://github.com/sbwml/packages_utils_runc feeds/packages/
 git clone --depth 1 https://github.com/svenshi/luci-app-oxidns package/luci-app-oxidns
 svn_export "master" "luci-app-tailscale-community" "package/luci-app-tailscale" "https://github.com/Tokisaki-Galaxy/luci-app-tailscale-community"
 # 修复上游 bug: tailscale.js 用了 lastDevicesStatus 但从未声明, 文件又是 'use strict',
-# 严格模式下给未声明变量赋值直接抛 ReferenceError -> 打开 Tailscale 页面即报
-# "lastDevicesStatus is not defined", 状态/设备列表刷新全部中断。补一行声明即可。
+# 严格模式下给未声明变量赋值直接抛 ReferenceError -> 打开页面即报
+# "lastDevicesStatus is not defined"。补一行声明即可。
 sed -i "s|^let map;$|let map;\nlet lastDevicesStatus;|" package/luci-app-tailscale/htdocs/luci-static/resources/view/tailscale.js
 svn_export "master" "applications/luci-app-cloudflared" "feeds/luci/applications/luci-app-cloudflared" "https://github.com/openwrt/luci"
 svn_export "main" "luci-app-bandix" "package/luci-app-bandix" "https://github.com/timsaya/luci-app-bandix"
@@ -126,11 +126,10 @@ curl -sSL https://raw.githubusercontent.com/mufeng05/turboacc/main/add_turboacc.
 #curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
 
 # 移除 turboacc 注入的 lede 旧版 nftables fullcone 补丁:
-# 该补丁针对旧版 nftables 编写, 与 ImmortalWrt master 的 nftables 1.1.6 不兼容,
+# 该补丁针对旧版 nftables, 与 ImmortalWrt master 的 nftables 1.1.6 不兼容,
 # 会导致 hunk 全部失配 -> "Patch failed" -> nftables 编译失败 -> 整个编译中断.
 # fullcone NAT 已由 ImmortalWrt 自带的 002-nftables-add-fullcone 补丁提供,
-# 移除此重复且过时的补丁不影响 fullcone 功能, 仅保留 turboacc 其余能力
-# (SFE 加速 / 内核 netfilter 补丁 / libnftnl fullcone 等).
+# 移除此重复且过时的补丁不影响 fullcone 功能, 仅保留 turboacc 其余能力.
 rm -f package/network/utils/nftables/patches/100-nftables-add-fullcone-expression-support.patch
 
 # 安装插件
@@ -151,12 +150,11 @@ sed -i "s|qidian|bilibili|g" package/luci-app-pushbot/root/usr/bin/pushbot/pushb
 sed -i '/dns_redirect/d' package/network/services/dnsmasq/files/dhcp.conf
 # 个性化设置
 sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ Wing build $(TZ=UTC-8 date "+%Y.%m.%d")')/g" $(find feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js")
-# 晶晨宝盒在线更新: 指向本人仓库 Mircc/N1-Build (仅 N1 固件含此插件, X86 无)
-# - 固件 tag 固定为 N1-ImmortalWrt, 每次编译同名覆盖 assets, 后缀保持 .img.gz
-# - 内核本仓库不单独发布, 保留上游默认 https://github.com/ophub/kernel
 sed -i "\|amlogic_firmware_repo|s|'.*'|'https://github.com/Mircc/N1-Build'|" package/luci-app-amlogic/root/etc/config/amlogic
 sed -i "\|amlogic_firmware_tag|s|'.*'|'N1-ImmortalWrt'|" package/luci-app-amlogic/root/etc/config/amlogic
 sed -i "s|breakingbadboy/OpenWrt|Mircc/N1-Build|g" package/luci-app-amlogic/luasrc/model/cbi/amlogic/amlogic_config.lua
+sed -i "s|ARMv8|ARMv8-im|g" package/luci-app-amlogic/root/etc/config/amlogic
+sed -i "s|ARMv8|ARMv8-im|g" package/luci-app-amlogic/luasrc/model/cbi/amlogic/amlogic_config.lua
 cd package
 # NTP服务器
 sed -i "s|\'time1\.apple\.com\'|\'0\.openwrt\.pool\.ntp\.org\'|g" base-files/files/bin/config_generate
@@ -230,11 +228,6 @@ cat > files/etc/banner << 'EOF'
 
 EOF
 
-
-# 安全加固块 —— Golden source: security/immo_diy-security.sh
-# 由 scripts/sync_immo_diy.py 幂等维护：被上游同步抹掉后会自动补回。
-# 功能: HTTPS 强制跳转 / SSH 仅密钥 / ttyd 强制 login / 防火墙限速 / DNS 加固
-# ============请勿在标记之间手工编辑============
 # ============ SECURITY_HARDENING_BLOCK_START ============
 # ==========================================================================
 # 安全加固块 —— 追加到 immo_diy.sh 中 `./scripts/feeds install -a` 之后
@@ -647,3 +640,4 @@ chmod +x files/etc/uci-defaults/99-zz-security-hardening
 echo "[immo_diy] security hardening files installed"
 # ====================== 安全加固块结束 ==================================
 # ============ SECURITY_HARDENING_BLOCK_END ============
+
